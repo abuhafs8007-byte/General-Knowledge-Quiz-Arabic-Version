@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار المعرفة - عربي</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="اختبر معلوماتك عبر 10 مواد عربية وإسلامية: النحو والصرف والبلاغة والفرائض والعروض والفقه والتوحيد والسيرة والمصطلح الحديث والحديث. منصة اختبار تفاعلية ممتعة وتعليمية.">
+    <meta name="keywords"
+        content="اختبار، اختبار إلكتروني، اختبار معلومات عامة، النحو، الصرف، البلاغة، الفرائض، العروض، الفقه، التوحيد، السيرة، المصطلح الحديث، الحديث، التعليم الممتع، اختبار تعليمي">
+    <meta name="author" content="أحمد ذوالقرنين أبو حفص عز العرب">
+    <meta property="og:title" content="اختبار المعرفة الشامل - اختبر مهاراتك!">
+    <meta property="og:description"
+        content="تحدَّ نفسك مع اختبارات شاملة في النحو والصرف والبلاغة والفرائض والعروض والفقه والتوحيد والسيرة والمصطلح الحديث والحديث. تعلم وتمتع!">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://abuhafs8007-byte.github.io/General-Knowledge-Interactive-Quiz/">
+    <meta property="og:image" content="https://github.com/abuhafs8007-byte/General-Knowledge-Interactive-Quiz/blob/main/meta.jpeg?raw=true">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="اختبار المعرفة الشامل - اختبر مهاراتك!">
+    <meta name="twitter:description"
+        content="تحدَّ نفسك مع اختبارات شاملة في النحو والصرف والبلاغة والفرائض والعروض والفقه والتوحيد والسيرة والمصطلح الحديث والحديث. تعلم وتمتع!">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/abuhafs8007-byte/General-Knowledge-Interactive-Quiz/refs/heads/main/meta.jpeg">
+</head>
+
+<body>
+
+    <div id="guidelineModal" class="modal-overlay">
+        <div class="modal-box">
+            <h2>📘 تَعْلِيمَاتِ الاختِبارِ</h2>
+            <ul>
+                <li>اِخْتَرِ المَادَّةَ وَمُسْتَوَى الصُّعوبَةِ قَبْلَ الْبَدْءِ.</li>
+                <li>لَك 20 ثانيةً لِكُلِّ سُؤالٍ.</li>
+                <li>العد التنازلي يبدأ عند بدء الاختبار.</li>
+                <li>تتغير ترتيب الأسئلة والاختيارات في كل مرة.</li>
+                <li>لا يمكنك العودة إلى سؤال سابق بعد الانتقال.</li>
+                <li>إذا نفد الوقت، يعتبر السؤال غير مُجاب.</li>
+                <li>سيُعرض مجموع النقاط وتقرير الأداء في النهاية.</li>
+                <li>حاول تحسين نتيجتك في كل مرة!</li>
+            </ul>
+            <button id="confirmGuidelines" class="btn">فَهِمْتُ</button>
+        </div>
+    </div>
+    <div class="container">
+        <!-- Start Screen -->
+        <div id="startScreen" class="screen active">
+            <h1>🎯 اِخْتِبَارٌ تَفَاعُلِيّ</h1>
+            <p class="subtitle">اِخْتَبِرْ مَعْرِفَتَكَ فِي الْمَوَادِّ الْعَرَبِيَّةِ</p>
+
+            <div class="form-group">
+                <label>اخْتَرِ المَادَّةَ:</label>
+                <div class="topic-grid">
+                    <button class="topic-btn" data-topic="nahw">النَّحْوُ</button>
+                    <button class="topic-btn" data-topic="sarf">الصَّرْفُ</button>
+                    <button class="topic-btn" data-topic="balagha">البَلاغَةُ</button>
+                    <button class="topic-btn" data-topic="faraid">الفَرائِضُ</button>
+                    <button class="topic-btn" data-topic="arood">العُرُوضُ</button>
+                    <button class="topic-btn" data-topic="fiqh">الفِقْهُ</button>
+                    <button class="topic-btn" data-topic="tawhid">التَوْحِيدُ</button>
+                    <button class="topic-btn" data-topic="seerah">السِيرَةُ</button>
+                    <button class="topic-btn" data-topic="mustalah_alhadith">المُصْطَلَحُ الْحَدِيثُ</button>
+                    <button class="topic-btn" data-topic="hadith">الْحَدِيثُ</button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="numQuestions">عَدَدُ الْأَسْئِلَةِ (٥-٢٠):</label>
+                <input type="number" id="numQuestions" min="5" max="20" value="10">
+            </div>
+
+            <div class="form-group">
+                <label>مُسْتَوَى الصُّعوبَةِ:</label>
+                <div class="difficulty-options">
+                    <button class="difficulty-btn" data-difficulty="easy">سَهْل</button>
+                    <button class="difficulty-btn selected" data-difficulty="medium">مُتَوَسِّط</button>
+                    <button class="difficulty-btn" data-difficulty="hard">صَعْب</button>
+                </div>
+            </div>
+
+            <button class="btn" id="startbtn">ابْدَأِ الاختِبَارَ</button>
+        </div>
+
+        <!-- Quiz Screen -->
+        <div id="quizScreen" class="screen">
+            <div class="quiz-header">
+                <div class="progress">
+                    <span id="currentQuestion">1</span> من <span id="totalQuestions">10</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="progressBarFill"></div>
+                    </div>
+                </div>
+                <div class="timer" id="timer">00:00</div>
+            </div>
+
+            <div class="question-container">
+                <div class="question-text" id="questionText"></div>
+                <div class="options" id="options"></div>
+            </div>
+
+            <button class="btn" id="nextBtn">السؤال التالي</button>
+            <button class="btn btn-secondary" id="quitBtn">إنهاء الاختبار</button>
+        </div>
+
+        <!-- Results Screen -->
+        <div id="resultsScreen" class="screen">
+            <h1>🏆 انْتَهَى الاخْتِبَارُ!</h1>
+            <div class="score-display" id="finalScore">10/10</div>
+            <hr class="scrMsg1"><div class="score-message" id="scoreMessage">أداء مميز! أحسنت!</div><hr class="scrMsg2">
+
+            <div class="results-details">
+                <div class="result-item">
+                    <span class="result-label">الإجابات الصحيحة:</span>
+                    <span class="result-value" id="correctCount">10</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">الإجابات الخاطئة:</span>
+                    <span class="result-value" id="wrongCount">0</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">النسبة:</span>
+                    <span class="result-value" id="percentage">100%</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">الوقت المستغرق:</span>
+                    <span class="result-value" id="timeTaken">01:30</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">المادة:</span>
+                    <span class="result-value" id="topicResult">النحو</span>
+                </div>
+            </div>
+
+            <button class="btn" id="restartBtn">اخْتِبَارٌ آخَر</button>
+
+            <button id="toggleReviewBtn" style="margin: 10px 0;" class="btn">⬇ عرض مراجعة الأسئلة ⬇</button>
+            <div id="quizReview" class="quiz-review"
+                style="display: none; border-top: 1px solid #ccc; padding-top: 10px;"></div>
+
+        </div>
+
+    </div>
+    </div>
+
+    <div id="celebrationContainer"></div>
+    <canvas id="confettiCanvas"></canvas>
+
+    </div>
+    <!-- Audio for pass/fail -->
+    <audio id="passSound" src="pass.mp3"></audio>
+    <audio id="failSound" src="fail.mp3"></audio>
+    <script src="failEffect.js" defer></script>
+    <script>
+        // Set current year in footer
+        window.addEventListener('DOMContentLoaded', function () {
+            var y = document.getElementById('year');
+            if (y) y.textContent = new Date().getFullYear();
+        });
+    </script>
+    <script src="script.js" defer></script>
+</body>
+
+</html>
