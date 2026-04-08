@@ -755,9 +755,12 @@ difficultyBtns.forEach(btn => {
 
 startBtn.addEventListener('click', startQuiz);
 nextBtn.addEventListener('click', nextQuestion);
-prevBtn.addEventListener('click', prevQuestion);
 quitBtn.addEventListener('click', quitQuiz);
 restartBtn.addEventListener('click', restartQuiz);
+
+if (prevBtn) {
+    prevBtn.addEventListener('click', prevQuestion);
+}
 
 // START QUIZ
 function startQuiz() {
@@ -994,3 +997,86 @@ function showScreen(screen) {
 
 // INIT
 difficultyBtns[1].classList.add('selected');
+
+
+
+
+// ================= MODAL =================
+const guidelineModal = document.getElementById('guidelineModal');
+const confirmBtn = document.getElementById('confirmGuidelines');
+
+if (confirmBtn && guidelineModal) {
+    confirmBtn.addEventListener('click', () => {
+        guidelineModal.style.display = 'none';
+    });
+}
+
+// ================= REVIEW TOGGLE =================
+const toggleReviewBtn = document.getElementById('toggleReviewBtn');
+const quizReview = document.getElementById('quizReview');
+
+if (toggleReviewBtn && quizReview) {
+    toggleReviewBtn.addEventListener('click', () => {
+
+        const isVisible = quizReview.style.display === 'block';
+
+        if (quizReview.style.display === 'none') {
+            renderQuizReview();
+            quizReview.style.display = 'block';
+        } else {
+            quizReview.style.display = 'none';
+        }
+
+        quizReview.style.display = isVisible ? 'none' : 'block';
+
+        toggleReviewBtn.textContent = isVisible
+            ? '⬇ عرض مراجعة الأسئلة ⬇'
+            : '⬆ إخفاء مراجعة الأسئلة ⬆';
+    });
+}
+
+// ================= REVIEW RENDER =================
+function renderQuizReview() {
+    if (!quizReview) return;
+
+    quizReview.innerHTML = '';
+
+    currentQuiz.forEach((question, qIndex) => {
+        const questionWrapper = document.createElement('div');
+        questionWrapper.style.marginBottom = '15px';
+        questionWrapper.style.padding = '8px';
+        questionWrapper.style.borderRadius = '5px';
+        questionWrapper.style.backgroundColor = '#f9f9f9';
+
+        const questionTitle = document.createElement('div');
+        questionTitle.textContent = `${diacritize(question.q)} (${toArabicDigits(qIndex + 1)})`;
+        questionTitle.style.fontWeight = '500';
+        questionTitle.style.marginBottom = '6px';
+
+        questionWrapper.appendChild(questionTitle);
+
+        question.opts.forEach((option, oIndex) => {
+            const optionDiv = document.createElement('div');
+            optionDiv.textContent = diacritize(option);
+            optionDiv.style.padding = '4px 8px';
+            optionDiv.style.borderRadius = '4px';
+            optionDiv.style.marginBottom = '3px';
+
+            const selected = selectedAnswers[qIndex];
+            const correct = question.ans;
+
+            if (oIndex === correct) {
+                optionDiv.style.backgroundColor = '#e0f2f1';
+                optionDiv.style.fontWeight = '500';
+            }
+
+            if (selected !== undefined && oIndex === selected && selected !== correct) {
+                optionDiv.style.backgroundColor = '#fce4ec';
+            }
+
+            questionWrapper.appendChild(optionDiv);
+        });
+
+        quizReview.appendChild(questionWrapper);
+    });
+}
