@@ -554,3 +554,12 @@ h1, .btn, .score-display, .question-text {
 .btn-prev:hover {
     background: #d1d5db;
 }
+
+
+#quitBtn {
+    background: #dc2626;
+}
+
+#quitBtn:hover {
+    background: #b91c1c;
+}
