@@ -15,7 +15,6 @@ body {
     direction: rtl;
     text-align: right;
     font-size: 18px;
-    overflow: hidden;
 }
 
 .container {
@@ -25,8 +24,7 @@ body {
     max-width: 600px;
     width: 100%;
     padding: 40px;
-    max-height: 100vh;
-    overflow-y: auto;
+    
 }
 
 .screen {
