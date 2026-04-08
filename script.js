@@ -678,7 +678,7 @@ const quizData = {
     },
 }
 
-// // Topic Names Mapping
+// Topic Names Mapping
 const topicNames = {
     nahw: 'النَّحْوُ',
     sarf: 'الصَّرْفُ',
