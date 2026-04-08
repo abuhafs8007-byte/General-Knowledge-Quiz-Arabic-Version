@@ -527,3 +527,28 @@ h1, .btn, .score-display, .question-text {
     font-family: 'Amiri', 'Traditional Arabic', 'Tajawal', 'Cairo', sans-serif;
     font-size: 18px;
 }
+
+
+
+
+
+.nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.nav-buttons .btn {
+    width: 48%;
+}
+
+/* Style Previous button differently */
+.btn-prev {
+    background: #e5e7eb; /* light grey */
+    color: #333;
+}
+
+.btn-prev:hover {
+    background: #d1d5db;
+}
