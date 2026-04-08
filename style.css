@@ -51,7 +51,7 @@ h1 {
     color: #1a202c;
     margin-bottom: 10px;
     text-align: center;
-    font-size: 42px;
+    font-size: 35px;
     font-weight: 700;
 }
 
@@ -59,29 +59,29 @@ h1 {
     color: #2d3748;
     text-align: center;
     margin-bottom: 30px;
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 600;
 }
 
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 15px;
 }
 
 label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 5px;
     color: #22223b;
     font-weight: 600;
-    font-size: 20px;
+    font-size: 15px;
 }
 
 input[type="number"],
 select {
     width: 100%;
-    padding: 12px;
+    padding: 10px;
     border: 2px solid #ddd;
     border-radius: 8px;
-    font-size: 18px;
+    font-size: 15px;
     transition: border-color 0.3s;
     font-family: 'Tajawal', 'Cairo', sans-serif;
 }
@@ -100,7 +100,7 @@ select:focus {
 
 .difficulty-btn {
     flex: 1;
-    padding: 14px;
+    padding: 10px;
     border: 2px solid #ddd;
     background: white;
     border-radius: 8px;
@@ -123,10 +123,10 @@ select:focus {
 .btn {
     background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
     color: white;
-    padding: 16px 30px;
+    padding: 14px 25px;
     border: none;
     border-radius: 8px;
-    font-size: 20px;
+    font-size: 15px;
     font-weight: 600;
     cursor: pointer;
     width: 100%;
@@ -163,8 +163,8 @@ select:focus {
     flex-direction: column;
     gap: 8px;
     align-items: stretch;
-    margin-bottom: 30px;
-    padding-bottom: 15px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
     border-bottom: 2px solid #eee;
 }
 
@@ -194,11 +194,11 @@ select:focus {
 .progress {
     color: #667eea;
     font-weight: 600;
-    font-size: 18px;
+    font-size: 15px;
 }
 
 .timer {
-    font-size: 22px;
+    font-size: 15px;
     font-weight: 700;
     color: #333;
 }
@@ -220,9 +220,9 @@ select:focus {
 }
 
 .question-text {
-    font-size: 24px;
+    font-size: 20px;
     color: #333;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     font-weight: 600;
     line-height: 1.6;
 }
@@ -230,14 +230,14 @@ select:focus {
 .options {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    font-size: 18px;
+    gap: 8px;
+    font-size: 15px;
 }
 
 .option {
     display: flex;
     align-items: center;
-    padding: 18px;
+    padding: 15px;
     border: 2px solid #b0b0b0;
     border-radius: 8px;
     cursor: pointer;
@@ -263,7 +263,7 @@ select:focus {
     cursor: pointer;
     flex: 1;
     font-weight: 400;
-    font-size: 18px;
+    font-size: 14px;
 }
 
 .option.selected {
@@ -286,14 +286,14 @@ select:focus {
 }
 
 .score-display {
-    font-size: 56px;
+    font-size: 40px;
     color: #4f46e5;
     font-weight: bold;
-    margin: 20px 0 0 0;
+    margin: 14px 0 0 0;
 }
 
 .score-message {
-    font-size: 20px;
+    font-size: 18px;
     color: black;
     margin-bottom: 10px;
     margin-top: 10px;
