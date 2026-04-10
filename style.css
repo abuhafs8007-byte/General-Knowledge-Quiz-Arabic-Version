@@ -426,6 +426,7 @@ hr.scrMsg2 {
 .modal-box ul {
     margin-bottom: 20px;
     padding-left: 20px;
+    list-style-position: inside;
 }
 
 @keyframes fadeInScale {
