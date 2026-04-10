@@ -1122,3 +1122,8 @@ function renderQuizReview() {
         quizReview.appendChild(questionWrapper);
     });
 }
+
+window.addEventListener("beforeunload", function (e) {
+  e.preventDefault();
+  e.returnValue = ""; // Required for most browsers
+});
