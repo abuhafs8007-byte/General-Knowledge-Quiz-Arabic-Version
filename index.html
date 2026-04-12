@@ -47,12 +47,7 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-
-        window.firebaseApp = app;
         window.db = db;
-
-        window.addDoc = addDoc;
-        window.collection = collection;
 
     </script>
 </head>
