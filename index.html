@@ -9,7 +9,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 
     <meta name="description"
@@ -28,34 +27,62 @@
     <meta name="twitter:description"
         content="تحدَّ نفسك مع اختبارات شاملة في النحو والصرف والبلاغة والفرائض والعروض والفقه والتوحيد والسيرة والمصطلح الحديث والحديث. تعلم وتمتع!">
     <meta name="twitter:image" content="https://raw.githubusercontent.com/abuhafs8007-byte/General-Knowledge-Quiz-Arabic-Version/refs/heads/main/Meta%20Arabic.png">
+
+    <!-- Firebase CDN -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        // Placeholder Firebase config - replace with your actual config
+        const firebaseConfig = {
+            apiKey: "AIzaSyAJaem6_icKmg04_SoiSyWrWBAiLC7TSPU",
+            authDomain: "cbt-exam-eng.firebaseapp.com",
+            projectId: "cbt-exam-eng",
+            storageBucket: "cbt-exam-eng.firebasestorage.app",
+            messagingSenderId: "138024431357",
+            appId: "1:138024431357:web:0347c448991e28fc6fd894",
+            measurementId: "G-FYBM55P9JD"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        window.firebaseApp = app;
+        window.db = db;
+
+        window.addDoc = addDoc;
+        window.collection = collection;
+
+    </script>
 </head>
 
 <body class="notranslate">
 
-    <!-- Guidelines -->
     <div id="guidelineModal" class="modal-overlay">
         <div class="modal-box">
             <h2>📘 إرشادات الاختبار</h2>
             <ul>
-                <li>اختر المادة ومستوى الصعوبة قبل البدء.</li>
-                <li>لديك ٤٣ ثانية لكل سؤال.</li>
-                <li>يبدأ العد التنازلي عند بدء الاختبار.</li>
+                <li>اختر المادة والمرحلة قبل بدء الاختبار.</li>
+                <li>لديك 37.5 ثانية لكل سؤال.</li>
+                <li>يبدأ العد التنازلي فور النقر على زر "ابدأ".</li>
                 <li>يتم تغيير ترتيب الأسئلة والاختيارات في كل مرة.</li>
-                <li>يمكنك الرجوع إلى السؤال السابق باستخدام زر "السابق".</li>
-                <li>إذا انتهى الوقت يتم إنهاء الاختبار تلقائياً.</li>
+                <li>يمكنك الرجوع إلى الأسئلة السابقة.</li>
+                <li>إذا انتهى الوقت يتم تسليم الاختبار تلقائياً.</li>
                 <li>سيتم عرض النتيجة وتقييم الأداء في النهاية.</li>
             </ul>
-
             <button id="confirmGuidelines" class="btn">فهمت</button>
         </div>
     </div>
-
     <div class="container">
-
         <!-- Start Screen -->
         <div id="startScreen" class="screen active">
-            <h1>امتحان إلكتروني (CBT)</h1>
-            <p class="subtitle">يرجى الإجابة على جميع الأسئلة</p>
+            <h1>📝 امتحان إلكتروني (CBT)</h1>
+            <p class="subtitle">أكمل امتحاناتك بدقة وانضباط.</p>
+
+            <div class="form-group">
+                <label for="studentName">اسم الطالب (مطلوب):</label>
+                <input type="text" id="studentName" placeholder="أدخل اسمك الكامل" required>
+            </div>
 
             <div class="form-group">
                 <label>اختر المادة:</label>
@@ -74,12 +101,12 @@
             </div>
 
             <div class="form-group">
-                <label for="numQuestions">عدد الأسئلة (5 - 40):</label>
+                <label for="numQuestions">عدد الأسئلة (5-40):</label>
                 <input type="number" id="numQuestions" min="5" max="40" value="40">
             </div>
 
             <div class="form-group">
-                <label>المراحل:</label>
+                <label>المرحلة:</label>
                 <div class="difficulty-options">
                     <button class="difficulty-btn" data-difficulty="easy">المرحلة ١</button>
                     <button class="difficulty-btn selected" data-difficulty="medium">المرحلة ٢</button>
@@ -112,11 +139,16 @@
                 <div class="options" id="options"></div>
             </div>
 
+            <div class="question-navigation">
+                <label for="questionSlider">الانتقال إلى السؤال:</label>
+                <input type="number" id="questionSlider" min="1" step="1" value="1">
+            </div>
+
             <!-- Navigation Buttons -->
             <div class="nav-buttons">
-    <button id="prevBtn" class="btn btn-prev">السؤال السابق</button>
-    <button id="nextBtn" class="btn">السؤال التالي</button>
-</div>
+                <button id="prevBtn" class="btn btn-prev">السؤال السابق</button>
+                <button id="nextBtn" class="btn">السؤال التالي</button>
+            </div>
 
             <button class="btn btn-secondary" id="quitBtn" disabled>الخروج من الاختبار</button>
         </div>
@@ -130,6 +162,21 @@
            <hr class="scrMsg1"><div class="score-message" id="scoreMessage"></div><hr class="scrMsg1">
 
             <div class="results-details">
+                <div class="result-item">
+                    <span class="result-label">الطالب:</span>
+                    <span class="result-value" id="studentNameResult">--</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">المرحلة:</span>
+                    <span class="result-value" id="classResult">--</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">المادة:</span>
+                    <span class="result-value" id="topicResult">--</span>
+                </div>
+
                 <div class="result-item">
                     <span class="result-label">الإجابات الصحيحة:</span>
                     <span class="result-value" id="correctCount">0</span>
@@ -148,11 +195,6 @@
                 <div class="result-item">
                     <span class="result-label">الوقت المستغرق:</span>
                     <span class="result-value" id="timeTaken">00:00</span>
-                </div>
-
-                <div class="result-item">
-                    <span class="result-label">المادة:</span>
-                    <span class="result-value" id="topicResult"></span>
                 </div>
             </div>
 
