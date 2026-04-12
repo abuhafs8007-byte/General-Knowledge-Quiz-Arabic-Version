@@ -669,66 +669,166 @@ input[type="radio"] + label {
 }
 
 
+/* ===== PERFECT COMPACT MOBILE MODE ===== */
 @media (max-width: 480px) {
 
     body {
-        padding: 10px;
+        padding: 6px;
+        align-items: flex-start;
     }
 
     .container {
-        padding: 15px;
+        padding: 10px;
         border-radius: 10px;
+        box-shadow: 0 5px 18px rgba(0,0,0,0.18);
     }
 
     h1 {
-        font-size: 16px;
+        font-size: 14px;
+        margin-bottom: 5px;
     }
 
     .subtitle {
+        font-size: 11px;
+        margin-bottom: 12px;
+    }
+
+    label {
         font-size: 12px;
-        margin-bottom: 20px;
+        margin-bottom: 5px;
     }
 
-    .question-text {
-        font-size: 16px;
-        padding: 12px;
-        line-height: 1.6;
+    input[type="text"],
+    input[type="number"],
+    select {
+        font-size: 13px;
+        padding: 7px;
     }
 
-    .option {
-        padding: 10px;
+    .difficulty-options {
+        gap: 6px;
     }
 
-    .option label {
-        font-size: 14px;
+    .difficulty-btn {
+        padding: 7px;
+        font-size: 12px;
     }
 
-    .btn {
-        font-size: 14px;
-        padding: 10px;
+    .quiz-header {
+        gap: 4px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
     }
 
-    .nav-buttons .btn {
-        font-size: 14px;
-        padding: 10px;
-        min-height: 45px;
-    }
-
-    .score-display {
-        font-size: 40px;
-    }
-
-    .timer {
-        font-size: 14px;
+    .progress-bar-container,
+    .progress-bar-bg {
+        height: 7px;
     }
 
     .progress {
+        font-size: 11px;
+    }
+
+    .timer {
         font-size: 12px;
     }
 
-    input, select {
+    .question-container {
+        margin-bottom: 12px;
+    }
+
+    .question-text {
         font-size: 14px;
-        padding: 8px;
+        padding: 10px;
+        line-height: 1.5;
+        border-radius: 8px;
+    }
+
+    .options {
+        gap: 6px;
+    }
+
+    .option {
+        padding: 9px;
+        border-radius: 6px;
+    }
+
+    .option input[type="radio"] {
+        width: 15px;
+        height: 15px;
+        margin-left: 10px;
+    }
+
+    .option label {
+        font-size: 13px;
+        line-height: 1.4;
+    }
+
+    .btn {
+        font-size: 13px;
+        padding: 9px;
+        border-radius: 6px;
+    }
+
+    .nav-buttons {
+        gap: 8px;
+        margin-top: 15px;
+    }
+
+    .nav-buttons .btn {
+        font-size: 13px;
+        padding: 9px;
+        min-height: 40px;
+    }
+
+    #quitBtn {
+        margin-top: 10px;
+        padding: 9px;
+    }
+
+    .score-display {
+        font-size: 32px;
+    }
+
+    .score-message {
+        font-size: 13px;
+        margin-top: 6px;
+    }
+
+    .results-details {
+        padding: 10px;
+        margin: 12px 0;
+    }
+
+    .result-item {
+        font-size: 12px;
+        padding: 6px 0;
+    }
+
+    .student-result-info {
+        font-size: 12px;
+        gap: 8px;
+    }
+
+    .topic-grid {
+        gap: 8px;
+    }
+
+    .topic-btn {
+        padding: 7px;
+        font-size: 11px;
+    }
+
+    .modal-box {
+        padding: 18px;
+    }
+
+    .modal-box h2 {
+        font-size: 15px;
+    }
+
+    .modal-box ul {
+        font-size: 12px;
     }
 }
 
