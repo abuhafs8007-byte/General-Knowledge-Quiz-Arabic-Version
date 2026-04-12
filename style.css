@@ -5,7 +5,7 @@
 }
 
 body {
-    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Tajawal', 'Cairo', 'Amiri', 'Traditional Arabic', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #5a67d8 0%, #6d28d9 100%);
     min-height: 100vh;
     display: flex;
@@ -173,6 +173,7 @@ select:focus {
     font-weight: 600;
     color: #333;
     white-space: nowrap;
+    font-family: var(--font-arabic-secondary);
 }
 
 .question-jump {
@@ -180,6 +181,7 @@ select:focus {
     align-items: center;
     gap: 10px;
     margin-bottom: 20px;
+    flex-wrap: wrap;
 }
 
 .question-jump label {
@@ -188,6 +190,7 @@ select:focus {
     color: #333;
     white-space: nowrap;
     min-width: 130px;
+    font-family: var(--font-arabic-secondary);
 }
 
 .question-jump input[type="number"] {
@@ -232,13 +235,16 @@ select:focus {
 
 .progress {
     color: #667eea;
-    font-weight: 600;
+    font-weight: 700;
+    font-family: var(--font-arabic-secondary);
+    font-size: 14px;
 }
 
 .timer {
     font-size: 18px;
-    font-weight: 600;
+    font-weight: 700;
     color: #333;
+    font-family: var(--font-arabic-secondary);
 }
 
 .timer.warning {
@@ -262,11 +268,13 @@ select:focus {
     color: #1a202c;
     margin-bottom: 25px;
     font-weight: 700;
-    line-height: 1.4;
+    line-height: 1.8;
+    letter-spacing: 0.3px;
     padding: 20px;
     background: #f8fafc;
     border-radius: 12px;
     border-left: 5px solid #667eea;
+    font-family: var(--font-arabic-serif);
 }
 
 .options {
@@ -274,6 +282,7 @@ select:focus {
     flex-direction: column;
     gap: 10px;
     font-size: 16px;
+    font-family: var(--font-arabic-primary);
 }
 
 .option {
@@ -285,6 +294,7 @@ select:focus {
     cursor: pointer;
     transition: all 0.3s;
     background: #fff;
+    font-family: var(--font-arabic-primary);
 }
 
 .option:hover {
@@ -303,8 +313,11 @@ select:focus {
     margin: 0;
     cursor: pointer;
     flex: 1;
-    font-weight: 300;
-    font-size: 15px;
+    font-weight: 500;
+    font-size: 16px;
+    line-height: 1.6;
+    letter-spacing: 0.2px;
+    font-family: var(--font-arabic-primary);
 }
 
 .option.selected {
@@ -328,18 +341,21 @@ select:focus {
 }
 
 .score-display {
-    font-size: 48px;
+    font-size: 56px;
     color: #4f46e5;
-    font-weight: bold;
+    font-weight: 700;
     margin: 20px 0 0 0;
+    font-family: var(--font-arabic-primary);
 }
 
 .score-message {
-    font-size: 15px;
+    font-size: 16px;
     color: black;
     margin-bottom: 10px;
     margin-top: 10px;
-    font-weight: 600;
+    font-weight: 700;
+    font-family: var(--font-arabic-secondary);
+    line-height: 1.6;
 }
 
 hr.scrMsg1,
@@ -366,7 +382,9 @@ hr.scrMsg2 {
     padding: 20px;
     border-radius: 8px;
     margin: 20px 0;
-    text-align: left;
+    text-align: right;
+    font-family: var(--font-arabic-primary);
+    direction: rtl;
 }
 
 .result-item {
@@ -374,6 +392,8 @@ hr.scrMsg2 {
     justify-content: space-between;
     padding: 10px 0;
     border-bottom: 1px solid #ddd;
+    font-family: var(--font-arabic-primary);
+    line-height: 1.6;
 }
 
 .result-item:last-child {
@@ -386,8 +406,10 @@ hr.scrMsg2 {
     gap: 20px;
     margin: 20px 0 10px;
     color: #22223b;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 15px;
+    font-family: var(--font-arabic-secondary);
+    direction: rtl;
 }
 
 .student-result-info span {
@@ -424,9 +446,12 @@ hr.scrMsg2 {
     background: white;
     border-radius: 8px;
     cursor: pointer;
-    font-weight: 500;
+    font-weight: 600;
     transition: all 0.3s;
     text-align: center;
+    font-family: var(--font-arabic-secondary);
+    font-size: 14px;
+    line-height: 1.5;
 }
 
 .topic-btn:hover, .topic-btn:focus {
@@ -477,15 +502,20 @@ hr.scrMsg2 {
     max-width: 400px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
     animation: fadeInScale 1.0s ease;
+    font-family: var(--font-arabic-primary);
+    direction: rtl;
 }
 
 .modal-box h2 {
     margin-bottom: 15px;
+    font-weight: 700;
+    line-height: 1.6;
 }
 
 .modal-box ul {
     margin-bottom: 20px;
-    padding-left: 20px;
+    padding-right: 20px;
+    line-height: 1.8;
 }
 
 @keyframes fadeInScale {
@@ -519,27 +549,35 @@ hr.scrMsg2 {
     background: #ffffff;
     padding: 12px 15px;
     margin-bottom: 12px;
-    border-left: 5px solid #e53935;
+    border-right: 5px solid #e53935;
     border-radius: 8px;
     opacity: 0;
     transform: translateY(15px);
     animation: slideIn 0.4s forwards;
+    font-family: var(--font-arabic-primary);
+    direction: rtl;
+    text-align: right;
 }
 
 /* Green correct border */
 .review-item.correct-answer {
-    border-left: 5px solid #2e7d32;
+    border-right: 5px solid #2e7d32;
 }
-
+.quiz-review div {
+    font-family: var(--font-arabic-serif);
+    font-size: 16px;
+    line-height: 1.8;
+    letter-spacing: 0.2px;
+}
 /* Text styles */
 .review-item .wrong {
     color: #e53935;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .review-item .correct {
     color: #2e7d32;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 /* Animation */
@@ -584,8 +622,9 @@ input[type="radio"] + label {
     flex: 1;
     font-size: 16px;
     padding: 14px 20px;
-    font-weight: 600;
+    font-weight: 700;
     min-height: 50px;
+    font-family: var(--font-arabic-secondary);
 }
 
 /* Style Previous button differently */
@@ -593,6 +632,7 @@ input[type="radio"] + label {
     background: #f3f4f6;
     color: #374151;
     border: 2px solid #d1d5db;
+    font-weight: 700;
 }
 
 .btn-prev:hover {
@@ -613,6 +653,8 @@ input[type="radio"] + label {
     background: #dc2626;
     margin-top: 15px;
     width: 100%;
+    font-weight: 700;
+    font-family: var(--font-arabic-secondary);
 }
 
 #quitBtn:hover {

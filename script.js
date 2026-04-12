@@ -1113,7 +1113,7 @@ function saveScoreToServer(name, score, classLevel, totalQuestions) {
 // === END ADD ===
 
 function quitQuiz() {
-    if (confirm('Are you sure you want to quit? Your progress will be lost.')) {
+    if (confirm('هل أنت متأكد من الخروج؟ سيتم فقدان تقدمك.')) {
         clearInterval(timerInterval);
         restartQuiz();
     }
@@ -1245,7 +1245,7 @@ toggleReviewBtn.addEventListener('click', () => {
     }
 
     quizReview.style.display = isVisible ? 'none' : 'block';
-    toggleReviewBtn.textContent = isVisible ? '⬇ Show Question Review ⬇' : '⬆ Hide Question Review ⬆';
+    toggleReviewBtn.textContent = isVisible ? '⬇ عرض مراجعة الأسئلة ⬇' : '⬆ إخفاء مراجعة الأسئلة ⬆';
 });
 
 
