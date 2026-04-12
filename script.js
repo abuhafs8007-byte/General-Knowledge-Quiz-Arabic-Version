@@ -934,7 +934,12 @@ const antiCheatSystem = {
      * Auto-submit exam when cheating is detected
      */
     autoSubmitExam(reason) {
-        if (examSubmitted) return;
+        if (examSubmitted) {
+            console.log('[ANTI-CHEAT] Auto-submit already initiated, skipping duplicate');
+            return;
+        }
+
+        console.log(`[ANTI-CHEAT] Cheating detected: ${reason}`);
 
         // Create persistent modal overlay
         const modalOverlay = document.createElement('div');
@@ -986,6 +991,8 @@ const antiCheatSystem = {
         const countdownEl = modalOverlay.querySelector('#countdown-timer');
         const progressBar = modalOverlay.querySelector('#progress-bar');
 
+        console.log('[ANTI-CHEAT] Starting 10-second countdown...');
+
         const countdownInterval = setInterval(() => {
             countdown--;
             countdownEl.textContent = countdown;
@@ -996,17 +1003,17 @@ const antiCheatSystem = {
 
             if (countdown <= 0) {
                 clearInterval(countdownInterval);
+                console.log('[ANTI-CHEAT] Countdown complete, initiating auto-submission...');
+                // Call async submission and ensure it's awaited
                 this.performAutoSubmission(modalOverlay);
             }
         }, 1000);
     },
 
     /**
-     * Perform the actual auto-submission after countdown
+     * Perform the actual auto-submission after countdown (async)
      */
-    performAutoSubmission(modalOverlay) {
-        console.log('🔄 Starting auto-submission process...');
-
+    async performAutoSubmission(modalOverlay) {
         // Update modal to show submission in progress
         const modalContent = modalOverlay.querySelector('.cheat-modal-content');
         modalContent.innerHTML = `
@@ -1015,21 +1022,23 @@ const antiCheatSystem = {
             <p>يرجى الانتظار...</p>
         `;
 
-        // Remove modal immediately to allow screen transition
-        setTimeout(() => {
-            console.log('🗑️ Removing modal overlay...');
-            if (modalOverlay.parentNode) {
-                modalOverlay.remove();
-            }
+        console.log('[AUTO-SUBMIT] Starting submission process...');
 
-            // Now call the finish quiz function to handle submission and Firebase
-            console.log('📤 Calling finishQuiz() for auto-submission...');
-            if (typeof finishQuiz === 'function') {
-                finishQuiz();
-            } else {
-                console.error('❌ finishQuiz function not found!');
+        // Call the finish quiz function (now async) to handle submission and Firebase
+        if (typeof finishQuiz === 'function') {
+            try {
+                await finishQuiz();
+                console.log('[AUTO-SUBMIT] Submission completed successfully');
+            } catch (error) {
+                console.error('[AUTO-SUBMIT] Submission error:', error);
             }
-        }, 500); // Small delay to show the "submitting" message briefly
+        }
+
+        // Remove modal after completion
+        if (modalOverlay.parentNode) {
+            modalOverlay.remove();
+            console.log('[AUTO-SUBMIT] Modal removed, navigated to results screen');
+        }
     },
     
     /**
@@ -1255,40 +1264,46 @@ function nextQuestion() {
     }
 }
 
-function finishQuiz() {
-    console.log('🏁 finishQuiz() called - starting quiz completion process...');
-
-    // === ADD THIS ===
+async function finishQuiz() {
+    // Prevent multiple submissions
     if (examSubmitted) {
-        console.log('⚠️ Quiz already submitted, preventing duplicate submission');
-        return; // Prevent multiple submissions
+        console.log('[FINISH-QUIZ] Already submitted, skipping duplicate');
+        return;
     }
     examSubmitted = true;
-    antiCheatSystem.disable(); // Disable anti-cheat protection
-    console.log('✅ Anti-cheat protection disabled');
-    // === END ADD ===
+    antiCheatSystem.disable();
 
+    console.log('[FINISH-QUIZ] Quiz submission initiated');
+
+    // Stop timer
     clearInterval(timerInterval);
     examStarted = false;
-    console.log('⏰ Timer cleared, exam marked as not started');
 
+    // Calculate score
     calculateScore();
-    console.log(`📊 Score calculated: ${score}/${currentQuiz.length}`);
+    console.log(`[FINISH-QUIZ] Score calculated: ${score}/${currentQuiz.length}`);
 
+    // Map difficulty to class level
     const classMapping = {
         easy: 'JSS 1',
         medium: 'JSS 2',
         hard: 'JSS 3'
     };
     const classLevel = classMapping[selectedDifficulty] || 'JSS 2';
-    console.log(`👤 Student: ${studentName}, Class: ${classLevel}, Subject: ${selectedTopic}`);
 
-    saveScoreToServer(studentName, score, classLevel, currentQuiz.length);
-    console.log('💾 Attempting to save score to Firebase...');
+    // Save to Firebase and wait for completion
+    try {
+        console.log('[FINISH-QUIZ] Saving to Firebase...');
+        await saveScoreToServer(studentName, score, classLevel, currentQuiz.length);
+        console.log('[FINISH-QUIZ] Firebase save completed successfully');
+    } catch (error) {
+        console.error('[FINISH-QUIZ] Firebase save failed, showing results anyway:', error);
+        // Continue to results screen even if Firebase fails
+    }
 
-    console.log('🖥️ Transitioning to results screen...');
+    // Transition to results screen
+    console.log('[FINISH-QUIZ] Transitioning to results screen');
     showScreen('results');
-    console.log('✅ Screen transition completed');
 }
 
 function calculateScore() {
@@ -1368,31 +1383,62 @@ function calculateScore() {
 
 // === ADD THIS ===
 function saveScoreToServer(name, score, classLevel, totalQuestions) {
-    if (!window.db || !window.addDoc || !window.collection) {
-        console.warn('Firebase not ready');
-        return;
-    }
+    return new Promise((resolve, reject) => {
+        // Check Firebase availability
+        if (!window.db || !window.addDoc || !window.collection) {
+            console.warn('[FIREBASE] Firebase not ready, storing locally');
+            // Store locally as fallback
+            const localScore = {
+                name: name,
+                class: classLevel,
+                subject: selectedTopic,
+                score: score,
+                scoreOver60: Math.round((score / totalQuestions) * 60),
+                percentage: Math.round((score / totalQuestions) * 100),
+                totalQuestions: totalQuestions,
+                timestamp: new Date().toISOString(),
+                source: 'local'
+            };
+            localStorage.setItem(`quiz_score_${Date.now()}`, JSON.stringify(localScore));
+            console.log('[FIREBASE] Score stored locally:', localScore);
+            resolve(localScore);
+            return;
+        }
 
-    const scoreOver60 = Math.round((score / totalQuestions) * 60);
-    const percentage = Math.round((score / totalQuestions) * 100);
+        const scoreOver60 = Math.round((score / totalQuestions) * 60);
+        const percentage = Math.round((score / totalQuestions) * 100);
 
-    window.addDoc(window.collection(window.db, 'cbt_scores'), {
-        name: name,
-        class: classLevel,
-        subject: selectedTopic,
-        score: score,
-        scoreOver60: scoreOver60,
-        percentage: percentage,
-        totalQuestions: totalQuestions,
-        timestamp: new Date()
-    }).then(() => {
-        console.log('✅ Score saved successfully');
-    }).catch((error) => {
-        console.error('❌ Error saving score:', error);
+        const scoreData = {
+            name: name,
+            class: classLevel,
+            subject: selectedTopic,
+            score: score,
+            scoreOver60: scoreOver60,
+            percentage: percentage,
+            totalQuestions: totalQuestions,
+            timestamp: new Date()
+        };
+
+        console.log('[FIREBASE] Saving score data:', scoreData);
+
+        window.addDoc(window.collection(window.db, 'cbt_scores'), scoreData)
+            .then((docRef) => {
+                console.log('✅ [FIREBASE] Score saved successfully with ID:', docRef.id);
+                resolve(docRef);
+            })
+            .catch((error) => {
+                console.error('❌ [FIREBASE] Error saving score:', error);
+                // Fallback: save locally
+                scoreData.timestamp = scoreData.timestamp.toISOString();
+                scoreData.source = 'local_fallback';
+                localStorage.setItem(`quiz_score_${Date.now()}`, JSON.stringify(scoreData));
+                console.log('[FIREBASE] Fallback: Score stored locally due to Firebase error');
+                // Resolve anyway to continue with results screen
+                resolve(scoreData);
+            });
     });
 }
 // View saved scores in Firebase Console → Firestore → cbt_scores
-// === END ADD ===
 
 function quitQuiz() {
     if (confirm('هل أنت متأكد من الخروج؟ سيتم فقدان تقدمك.')) {
