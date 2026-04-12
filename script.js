@@ -935,15 +935,95 @@ const antiCheatSystem = {
      */
     autoSubmitExam(reason) {
         if (examSubmitted) return;
-        
-        alert(`❌ تم اكتشاف محاولة غش!\n\nالسبب: ${reason}\n\nسيتم تسليم إجاباتك الآن.`);
+
+        // Create persistent modal overlay
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'cheat-detection-modal';
+        modalOverlay.innerHTML = `
+            <div class="cheat-modal-content">
+                <div class="cheat-icon">❌</div>
+                <h2>تم اكتشاف محاولة غش!</h2>
+                <p class="cheat-reason">${reason}</p>
+                <p class="cheat-message">سيتم تسليم إجاباتك تلقائياً خلال 10 ثوانٍ...</p>
+                <div class="cheat-countdown">
+                    <span id="countdown-timer">10</span>
+                    <span>ثانية متبقية</span>
+                </div>
+                <div class="cheat-progress">
+                    <div class="cheat-progress-bar" id="progress-bar"></div>
+                </div>
+            </div>
+        `;
+
+        modalOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10001;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Tajawal', 'Cairo', 'Amiri', 'Traditional Arabic', 'Segoe UI', sans-serif;
+            direction: rtl;
+        `;
+
+        document.body.appendChild(modalOverlay);
+
+        // Prevent any user interaction
+        modalOverlay.addEventListener('click', (e) => e.preventDefault());
+        modalOverlay.addEventListener('keydown', (e) => e.preventDefault());
+        modalOverlay.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // Mark as submitted immediately to prevent further attempts
         examSubmitted = true;
         this.navigationPreventionActive = false;
-        
-        // Call the finish quiz function
+
+        // Countdown timer
+        let countdown = 10;
+        const countdownEl = modalOverlay.querySelector('#countdown-timer');
+        const progressBar = modalOverlay.querySelector('#progress-bar');
+
+        const countdownInterval = setInterval(() => {
+            countdown--;
+            countdownEl.textContent = countdown;
+
+            // Update progress bar (10 seconds total, so 10% per second)
+            const progress = ((10 - countdown) / 10) * 100;
+            progressBar.style.width = `${progress}%`;
+
+            if (countdown <= 0) {
+                clearInterval(countdownInterval);
+                this.performAutoSubmission(modalOverlay);
+            }
+        }, 1000);
+    },
+
+    /**
+     * Perform the actual auto-submission after countdown
+     */
+    performAutoSubmission(modalOverlay) {
+        // Update modal to show submission in progress
+        const modalContent = modalOverlay.querySelector('.cheat-modal-content');
+        modalContent.innerHTML = `
+            <div class="cheat-icon">⏳</div>
+            <h2>جاري تسليم الإجابات...</h2>
+            <p>يرجى الانتظار...</p>
+        `;
+
+        // Call the finish quiz function to handle submission and Firebase
         if (typeof finishQuiz === 'function') {
             finishQuiz();
         }
+
+        // Remove modal after a brief delay to show completion
+        setTimeout(() => {
+            if (modalOverlay.parentNode) {
+                modalOverlay.remove();
+            }
+        }, 2000);
     },
     
     /**

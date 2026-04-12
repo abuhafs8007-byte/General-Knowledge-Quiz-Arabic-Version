@@ -859,6 +859,101 @@ input[type="radio"] + label {
     display: block !important;
 }
 
+/* Cheat Detection Modal */
+.cheat-detection-modal {
+    font-family: 'Tajawal', 'Cairo', 'Amiri', 'Traditional Arabic', 'Segoe UI', sans-serif !important;
+    direction: rtl;
+}
+
+.cheat-modal-content {
+    background: white;
+    border-radius: 15px;
+    padding: 40px;
+    max-width: 500px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    animation: modalSlideIn 0.5s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.cheat-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.cheat-modal-content h2 {
+    color: #e53e3e;
+    margin-bottom: 15px;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.cheat-reason {
+    color: #4a5568;
+    font-size: 16px;
+    margin-bottom: 15px;
+    font-weight: 500;
+}
+
+.cheat-message {
+    color: #2d3748;
+    font-size: 18px;
+    margin-bottom: 25px;
+    font-weight: 600;
+}
+
+.cheat-countdown {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    font-size: 20px;
+    font-weight: bold;
+    color: #e53e3e;
+}
+
+#countdown-timer {
+    background: #e53e3e;
+    color: white;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.cheat-progress {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.cheat-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #e53e3e, #fc8181);
+    width: 0%;
+    transition: width 1s linear;
+    border-radius: 4px;
+}
+
 /* Prevent user selection during exam (anti-cheat) */
 .quiz-screen {
     user-select: text;
