@@ -751,6 +751,212 @@ let tabSwitchCount = 0;
 let examSubmitted = false;
 let examStarted = false;
 
+// ==================== ANTI-CHEAT SYSTEM ====================
+const antiCheatSystem = {
+    navigationAttemptCount: 0,
+    maxAttemptsBeforeAutoSubmit: 3,
+    isNavigationLocked: false,
+    navigationPreventionActive: false,
+    warningMessages: [],
+    
+    /**
+     * Initialize anti-cheat protection when exam starts
+     */
+    init() {
+        if (examStarted && !examSubmitted) {
+            this.navigationPreventionActive = true;
+            this.attachGlobalListeners();
+            this.blockBrowserNavigation();
+        }
+    },
+    
+    /**
+     * Attach global event listeners for navigation attempts
+     */
+    attachGlobalListeners() {
+        // Back/Forward button and history navigation
+        window.addEventListener('popstate', (e) => this.handleNavigationAttempt('back/forward'));
+        
+        // Tab/Window close and page navigation
+        window.addEventListener('beforeunload', (e) => this.handleBeforeUnload(e));
+        
+        // Tab visibility change (switching tabs/windows)
+        document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+    },
+    
+    /**
+     * Handle back/forward button navigation attempts
+     */
+    handleNavigationAttempt(source) {
+        if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
+        
+        // Push a new state to prevent actual back navigation
+        history.pushState(null, null, window.location.href);
+        
+        this.showNavigationWarning('الزر الخلفي/الأمامي');
+    },
+    
+    /**
+     * Handle beforeunload event (page refresh, close tab, navigate away)
+     */
+    handleBeforeUnload(e) {
+        if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
+        
+        // Prevent default browser behavior
+        e.preventDefault();
+        e.returnValue = '';
+        
+        // Log the attempt
+        this.navigationAttemptCount++;
+        
+        return '';
+    },
+    
+    /**
+     * Handle tab/window visibility changes
+     */
+    handleVisibilityChange() {
+        if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
+        
+        if (document.visibilityState === 'hidden') {
+            this.navigationAttemptCount++;
+            this.showTabSwitchWarning();
+        }
+    },
+    
+    /**
+     * Show warning dialog for navigation attempts
+     */
+    showNavigationWarning(source) {
+        this.navigationAttemptCount++;
+        const attemptsLeft = this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount;
+        
+        let message = `⚠️ تحذير: لا يمكنك مغادرة الامتحان!\n\n`;
+        message += `محاولة التنقل عبر: ${source}\n`;
+        message += `محاولات متبقية: ${attemptsLeft}/${this.maxAttemptsBeforeAutoSubmit}\n\n`;
+        message += `إذا حاولت ${this.maxAttemptsBeforeAutoSubmit} مرات، سيتم تسليم إجاباتك تلقائياً!`;
+        
+        alert(message);
+        
+        // Auto-submit if max attempts exceeded
+        if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
+            this.autoSubmitExam('تجاوز عدد محاولات المغادرة المسموحة');
+        }
+    },
+    
+    /**
+     * Show warning for tab switching
+     */
+    showTabSwitchWarning() {
+        const attemptsLeft = this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount;
+        
+        let message = `⚠️ تحذير: تم اكتشاف تبديل التبويب!\n\n`;
+        message += `محاولات متبقية: ${attemptsLeft}/${this.maxAttemptsBeforeAutoSubmit}\n\n`;
+        message += `يرجى العودة إلى نافذة الامتحان فوراً!`;
+        
+        // Show warning
+        const warningEl = document.createElement('div');
+        warningEl.className = 'tab-switch-warning';
+        warningEl.innerHTML = message.replace(/\n/g, '<br>');
+        warningEl.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff6b6b;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            z-index: 10000;
+            max-width: 400px;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease-out;
+        `;
+        
+        document.body.appendChild(warningEl);
+        
+        // Auto-remove warning after 5 seconds
+        setTimeout(() => warningEl.remove(), 5000);
+        
+        // Auto-submit if max attempts exceeded
+        if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
+            this.autoSubmitExam('تم تبديل التبويب أكثر من المحاولات المسموحة');
+        }
+    },
+    
+    /**
+     * Block browser navigation mechanisms
+     */
+    blockBrowserNavigation() {
+        // Prevent right-click context menu
+        document.addEventListener('contextmenu', (e) => {
+            if (examStarted && !examSubmitted) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Prevent keyboard shortcuts for browser navigation
+        document.addEventListener('keydown', (e) => {
+            if (!examStarted || examSubmitted) return;
+            
+            // Prevent Back button (Alt+Left or Backspace in some cases)
+            if ((e.altKey && e.key === 'ArrowLeft') || (e.key === 'Backspace' && e.target !== document.activeElement)) {
+                e.preventDefault();
+                this.handleNavigationAttempt('Backspace key');
+                return false;
+            }
+            
+            // Prevent F5 (Refresh)
+            if (e.key === 'F5') {
+                e.preventDefault();
+                this.showNavigationWarning('F5 (Refresh)');
+                return false;
+            }
+            
+            // Prevent Ctrl+R or Cmd+R (Refresh)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+                e.preventDefault();
+                this.showNavigationWarning('Ctrl+R (Refresh)');
+                return false;
+            }
+            
+            // Prevent Ctrl+W or Cmd+W (Close Tab)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+                e.preventDefault();
+                this.showNavigationWarning('Ctrl+W (Close Tab)');
+                return false;
+            }
+        });
+    },
+    
+    /**
+     * Auto-submit exam when cheating is detected
+     */
+    autoSubmitExam(reason) {
+        if (examSubmitted) return;
+        
+        alert(`❌ تم اكتشاف محاولة غش!\n\nالسبب: ${reason}\n\nسيتم تسليم إجاباتك الآن.`);
+        examSubmitted = true;
+        this.navigationPreventionActive = false;
+        
+        // Call the finish quiz function
+        if (typeof finishQuiz === 'function') {
+            finishQuiz();
+        }
+    },
+    
+    /**
+     * Disable anti-cheat protection (called after quiz is submitted)
+     */
+    disable() {
+        this.navigationPreventionActive = false;
+        this.navigationAttemptCount = 0;
+        examSubmitted = true;
+    }
+};
+// ===================== END ANTI-CHEAT SYSTEM =====================
+
 // Progress Bar Helper
 function updateProgressBar(current, total) {
     const bar = document.getElementById('progressBarFill');
@@ -807,34 +1013,6 @@ questionSlider.addEventListener('input', (e) => {
     }
 });
 
-// Anti-cheat: Tab switch detection
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && !examSubmitted && examStarted) {
-        const attemptsRemaining = Math.max(0, 2 - tabSwitchCount);
-        const message = `أنت تحاول مغادرة تبويب الامتحان. لديك ${attemptsRemaining} محاولات متبقية قبل تسليم امتحانك تلقائياً. هل تريد المتابعة؟`;
-        const proceed = confirm(message);
-
-        if (proceed) {
-            tabSwitchCount++;
-            if (tabSwitchCount >= 3) {
-                finishQuiz();
-            }
-        } else {
-            setTimeout(() => {
-                if (typeof window.focus === 'function') {
-                    window.focus();
-                }
-            }, 300);
-        }
-    }
-});
-
-window.onbeforeunload = function () {
-    if (!examSubmitted && examStarted) {
-        return "امتحانك لا يزال قيد التنفيذ. سيتم تسليم الاختبار عند المغادرة.";
-    }
-};
-
 function startQuiz() {
     // === ADD THIS ===
     studentName = document.getElementById('studentName').value.trim();
@@ -888,6 +1066,7 @@ function startQuiz() {
 
     tabSwitchCount = 0;
     examStarted = true;
+    antiCheatSystem.init(); // Initialize anti-cheat protection
     showScreen('quiz');
     displayQuestion();
 }
@@ -994,6 +1173,7 @@ function finishQuiz() {
     // === ADD THIS ===
     if (examSubmitted) return; // Prevent multiple submissions
     examSubmitted = true;
+    antiCheatSystem.disable(); // Disable anti-cheat protection
     // === END ADD ===
 
     clearInterval(timerInterval);
