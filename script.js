@@ -1198,6 +1198,7 @@ function startQuiz() {
     antiCheatSystem.init(); // Initialize anti-cheat protection
     showScreen('quiz');
     displayQuestion();
+    document.getElementById('studentNameHeader').textContent = studentName;
 }
 function startTimer() {
     const timerEl = document.getElementById('timer');

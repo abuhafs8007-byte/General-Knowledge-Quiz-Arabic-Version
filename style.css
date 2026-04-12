@@ -163,6 +163,18 @@ select:focus {
     border-bottom: 2px solid #eee;
 }
 
+.quiz-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.student-name-display {
+    overflow-wrap: anywhere;
+}
+
 .question-nav {
     display: flex;
     align-items: center;
