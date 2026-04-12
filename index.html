@@ -8,9 +8,12 @@
     <title>اختبار المعرفة - عربي</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-     <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Tajawal:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 
     <meta name="description"
         content="اختبر معلوماتك عبر 10 مواد عربية وإسلامية: النحو والصرف والبلاغة والفرائض والعروض والفقه والتوحيد والسيرة والمصطلح الحديث والحديث. منصة اختبار تفاعلية ممتعة وتعليمية.">
@@ -22,15 +25,17 @@
         content="تحدَّ نفسك مع اختبارات شاملة في النحو والصرف والبلاغة والفرائض والعروض والفقه والتوحيد والسيرة والمصطلح الحديث والحديث. تعلم وتمتع!">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://abuhafs8007-byte.github.io/General-Knowledge-Quiz-Arabic-Version/">
-    <meta property="og:image" content="https://raw.githubusercontent.com/abuhafs8007-byte/General-Knowledge-Quiz-Arabic-Version/refs/heads/main/Meta%20Arabic.png">
+    <meta property="og:image"
+        content="https://raw.githubusercontent.com/abuhafs8007-byte/General-Knowledge-Quiz-Arabic-Version/refs/heads/main/Meta%20Arabic.png">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="اختبار المعرفة الشامل - اختبر مهاراتك!">
     <meta name="twitter:description"
         content="تحدَّ نفسك مع اختبارات شاملة في النحو والصرف والبلاغة والفرائض والعروض والفقه والتوحيد والسيرة والمصطلح الحديث والحديث. تعلم وتمتع!">
-    <meta name="twitter:image" content="https://raw.githubusercontent.com/abuhafs8007-byte/General-Knowledge-Quiz-Arabic-Version/refs/heads/main/Meta%20Arabic.png">
+    <meta name="twitter:image"
+        content="https://raw.githubusercontent.com/abuhafs8007-byte/General-Knowledge-Quiz-Arabic-Version/refs/heads/main/Meta%20Arabic.png">
 
     <!-- Firebase CDN -->
-   <script type="module">
+    <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
@@ -48,6 +53,10 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         window.db = db;
+
+        window.addDoc = addDoc;
+        window.collection = collection;
+
 
     </script>
 </head>
@@ -155,7 +164,9 @@
 
             <div class="score-display" id="finalScore">60/60</div>
 
-           <hr class="scrMsg1"><div class="score-message" id="scoreMessage"></div><hr class="scrMsg1">
+            <hr class="scrMsg1">
+            <div class="score-message" id="scoreMessage"></div>
+            <hr class="scrMsg1">
 
             <div class="results-details">
                 <div class="result-item">
@@ -216,4 +227,5 @@
     <script src="script.js" defer></script>
 
 </body>
+
 </html>
