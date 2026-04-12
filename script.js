@@ -1005,6 +1005,8 @@ const antiCheatSystem = {
      * Perform the actual auto-submission after countdown
      */
     performAutoSubmission(modalOverlay) {
+        console.log('🔄 Starting auto-submission process...');
+
         // Update modal to show submission in progress
         const modalContent = modalOverlay.querySelector('.cheat-modal-content');
         modalContent.innerHTML = `
@@ -1013,17 +1015,21 @@ const antiCheatSystem = {
             <p>يرجى الانتظار...</p>
         `;
 
-        // Call the finish quiz function to handle submission and Firebase
-        if (typeof finishQuiz === 'function') {
-            finishQuiz();
-        }
-
-        // Remove modal after a brief delay to show completion
+        // Remove modal immediately to allow screen transition
         setTimeout(() => {
+            console.log('🗑️ Removing modal overlay...');
             if (modalOverlay.parentNode) {
                 modalOverlay.remove();
             }
-        }, 2000);
+
+            // Now call the finish quiz function to handle submission and Firebase
+            console.log('📤 Calling finishQuiz() for auto-submission...');
+            if (typeof finishQuiz === 'function') {
+                finishQuiz();
+            } else {
+                console.error('❌ finishQuiz function not found!');
+            }
+        }, 500); // Small delay to show the "submitting" message briefly
     },
     
     /**
@@ -1250,23 +1256,39 @@ function nextQuestion() {
 }
 
 function finishQuiz() {
+    console.log('🏁 finishQuiz() called - starting quiz completion process...');
+
     // === ADD THIS ===
-    if (examSubmitted) return; // Prevent multiple submissions
+    if (examSubmitted) {
+        console.log('⚠️ Quiz already submitted, preventing duplicate submission');
+        return; // Prevent multiple submissions
+    }
     examSubmitted = true;
     antiCheatSystem.disable(); // Disable anti-cheat protection
+    console.log('✅ Anti-cheat protection disabled');
     // === END ADD ===
 
     clearInterval(timerInterval);
     examStarted = false;
+    console.log('⏰ Timer cleared, exam marked as not started');
+
     calculateScore();
+    console.log(`📊 Score calculated: ${score}/${currentQuiz.length}`);
+
     const classMapping = {
         easy: 'JSS 1',
         medium: 'JSS 2',
         hard: 'JSS 3'
     };
     const classLevel = classMapping[selectedDifficulty] || 'JSS 2';
+    console.log(`👤 Student: ${studentName}, Class: ${classLevel}, Subject: ${selectedTopic}`);
+
     saveScoreToServer(studentName, score, classLevel, currentQuiz.length);
+    console.log('💾 Attempting to save score to Firebase...');
+
+    console.log('🖥️ Transitioning to results screen...');
     showScreen('results');
+    console.log('✅ Screen transition completed');
 }
 
 function calculateScore() {
