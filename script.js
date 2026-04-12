@@ -1465,7 +1465,7 @@ function saveScoreToServer(name, score, classLevel, totalQuestions) {
 
         console.log('[FIREBASE] Saving score data:', scoreData);
 
-        window.addDoc(window.collection(window.db, 'cbt_scores_arabic'), scoreData)
+        window.addDoc(collection(db, 'cbt_scores_arabic'), scoreData)
             .then((docRef) => {
                 console.log('✅ [FIREBASE] Score saved successfully with ID:', docRef.id);
                 resolve(docRef);
