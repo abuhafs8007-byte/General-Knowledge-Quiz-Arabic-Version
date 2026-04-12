@@ -12,6 +12,7 @@ body {
     justify-content: center;
     align-items: center;
     padding: 20px;
+    direction: rtl;
 }
 
 .container {
@@ -273,7 +274,8 @@ select:focus {
     padding: 20px;
     background: #f8fafc;
     border-radius: 12px;
-    border-left: 5px solid #667eea;
+    border-right: 5px solid #667eea;
+    border-left: none;
     font-family: var(--font-arabic-serif);
 }
 
@@ -664,4 +666,79 @@ input[type="radio"] + label {
 #quitBtn:disabled {
     background: #fca5a5;
     cursor: not-allowed;
+}
+
+
+@media (max-width: 480px) {
+
+    body {
+        padding: 10px;
+    }
+
+    .container {
+        padding: 15px;
+        border-radius: 10px;
+    }
+
+    h1 {
+        font-size: 16px;
+    }
+
+    .subtitle {
+        font-size: 12px;
+        margin-bottom: 20px;
+    }
+
+    .question-text {
+        font-size: 16px;
+        padding: 12px;
+        line-height: 1.6;
+    }
+
+    .option {
+        padding: 10px;
+    }
+
+    .option label {
+        font-size: 14px;
+    }
+
+    .btn {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    .nav-buttons .btn {
+        font-size: 14px;
+        padding: 10px;
+        min-height: 45px;
+    }
+
+    .score-display {
+        font-size: 40px;
+    }
+
+    .timer {
+        font-size: 14px;
+    }
+
+    .progress {
+        font-size: 12px;
+    }
+
+    input, select {
+        font-size: 14px;
+        padding: 8px;
+    }
+}
+
+
+
+.nav-buttons {
+    flex-direction: row-reverse;
+}
+
+.option input[type="radio"] {
+    margin-left: 15px;
+    margin-right: 0;
 }
