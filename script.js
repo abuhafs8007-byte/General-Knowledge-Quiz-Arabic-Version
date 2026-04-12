@@ -764,10 +764,21 @@ const antiCheatSystem = {
      */
     init() {
         if (examStarted && !examSubmitted) {
+            this.reset();
             this.navigationPreventionActive = true;
             this.attachGlobalListeners();
             this.blockBrowserNavigation();
+            console.log('[ANTI-CHEAT] Protection initialized');
         }
+    },
+
+    /**
+     * Reset anti-cheat counters and state
+     */
+    reset() {
+        this.navigationAttemptCount = 0;
+        this.navigationPreventionActive = false;
+        console.log('[ANTI-CHEAT] System reset');
     },
     
     /**
@@ -776,12 +787,16 @@ const antiCheatSystem = {
     attachGlobalListeners() {
         // Back/Forward button and history navigation
         window.addEventListener('popstate', (e) => this.handleNavigationAttempt('back/forward'));
-        
+
         // Tab/Window close and page navigation
         window.addEventListener('beforeunload', (e) => this.handleBeforeUnload(e));
-        
-        // Tab visibility change (switching tabs/windows)
-        document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+
+        // Tab visibility change (switching tabs/windows) - check if supported
+        if (typeof document.visibilityState !== 'undefined') {
+            document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+        } else {
+            console.warn('[ANTI-CHEAT] Page Visibility API not supported - tab switching detection limited');
+        }
     },
     
     /**
@@ -817,10 +832,15 @@ const antiCheatSystem = {
      */
     handleVisibilityChange() {
         if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
-        
+
         if (document.visibilityState === 'hidden') {
+            // Tab became hidden - potential cheating
             this.navigationAttemptCount++;
             this.showTabSwitchWarning();
+        } else if (document.visibilityState === 'visible') {
+            // Tab became visible again - user returned
+            console.log('[ANTI-CHEAT] User returned to exam tab');
+            // Could add logic here to track return time if needed
         }
     },
     
@@ -828,32 +848,34 @@ const antiCheatSystem = {
      * Show warning dialog for navigation attempts
      */
     showNavigationWarning(source) {
-        this.navigationAttemptCount++;
-        const attemptsLeft = this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount;
-        
+        // Don't increment here - already incremented in caller
+        const attemptsLeft = Math.max(0, this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount);
+
         let message = `⚠️ تحذير: لا يمكنك مغادرة الامتحان!\n\n`;
         message += `محاولة التنقل عبر: ${source}\n`;
         message += `محاولات متبقية: ${attemptsLeft}/${this.maxAttemptsBeforeAutoSubmit}\n\n`;
         message += `إذا حاولت ${this.maxAttemptsBeforeAutoSubmit} مرات، سيتم تسليم إجاباتك تلقائياً!`;
-        
+
         alert(message);
-        
+
         // Auto-submit if max attempts exceeded
         if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
             this.autoSubmitExam('تجاوز عدد محاولات المغادرة المسموحة');
         }
     },
-    
+
     /**
      * Show warning for tab switching
      */
     showTabSwitchWarning() {
-        const attemptsLeft = this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount;
-        
+        // Increment counter for tab switches
+        this.navigationAttemptCount++;
+        const attemptsLeft = Math.max(0, this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount);
+
         let message = `⚠️ تحذير: تم اكتشاف تبديل التبويب!\n\n`;
         message += `محاولات متبقية: ${attemptsLeft}/${this.maxAttemptsBeforeAutoSubmit}\n\n`;
         message += `يرجى العودة إلى نافذة الامتحان فوراً!`;
-        
+
         // Show warning
         const warningEl = document.createElement('div');
         warningEl.className = 'tab-switch-warning';
@@ -872,12 +894,16 @@ const antiCheatSystem = {
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             animation: slideIn 0.3s ease-out;
         `;
-        
+
         document.body.appendChild(warningEl);
-        
+
         // Auto-remove warning after 5 seconds
-        setTimeout(() => warningEl.remove(), 5000);
-        
+        setTimeout(() => {
+            if (warningEl.parentNode) {
+                warningEl.remove();
+            }
+        }, 5000);
+
         // Auto-submit if max attempts exceeded
         if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
             this.autoSubmitExam('تم تبديل التبويب أكثر من المحاولات المسموحة');
@@ -899,35 +925,50 @@ const antiCheatSystem = {
         // Prevent keyboard shortcuts for browser navigation
         document.addEventListener('keydown', (e) => {
             if (!examStarted || examSubmitted) return;
-            
-            // Prevent Back button (Alt+Left or Backspace in some cases)
-            if ((e.altKey && e.key === 'ArrowLeft') || (e.key === 'Backspace' && e.target !== document.activeElement)) {
-                e.preventDefault();
-                this.handleNavigationAttempt('Backspace key');
-                return false;
-            }
-            
-            // Prevent F5 (Refresh)
+
+            // Prevent F5 (Refresh) - most common
             if (e.key === 'F5') {
                 e.preventDefault();
+                this.navigationAttemptCount++;
                 this.showNavigationWarning('F5 (Refresh)');
                 return false;
             }
-            
+
             // Prevent Ctrl+R or Cmd+R (Refresh)
             if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
                 e.preventDefault();
+                this.navigationAttemptCount++;
                 this.showNavigationWarning('Ctrl+R (Refresh)');
                 return false;
             }
-            
+
             // Prevent Ctrl+W or Cmd+W (Close Tab)
             if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
                 e.preventDefault();
+                this.navigationAttemptCount++;
                 this.showNavigationWarning('Ctrl+W (Close Tab)');
                 return false;
             }
+
+            // Prevent Alt+Left (Back) - but allow in input fields
+            if (e.altKey && e.key === 'ArrowLeft' && !this.isInInputField(e.target)) {
+                e.preventDefault();
+                this.navigationAttemptCount++;
+                this.showNavigationWarning('Alt+Left (Back)');
+                return false;
+            }
         });
+    },
+
+    /**
+     * Check if event target is an input field where backspace should be allowed
+     */
+    isInInputField(target) {
+        return target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.contentEditable === 'true'
+        );
     },
     
     /**
@@ -977,67 +1018,97 @@ const antiCheatSystem = {
 
         document.body.appendChild(modalOverlay);
 
-        // Prevent any user interaction
-        modalOverlay.addEventListener('click', (e) => e.preventDefault());
-        modalOverlay.addEventListener('keydown', (e) => e.preventDefault());
-        modalOverlay.addEventListener('contextmenu', (e) => e.preventDefault());
+        // Prevent any user interaction during countdown
+        const preventInteraction = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        };
+
+        modalOverlay.addEventListener('click', preventInteraction);
+        modalOverlay.addEventListener('keydown', preventInteraction);
+        modalOverlay.addEventListener('contextmenu', preventInteraction);
+
+        // Also prevent beforeunload during countdown
+        const preventUnload = (e) => {
+            e.preventDefault();
+            e.returnValue = 'الامتحان قيد التسليم التلقائي. يرجى الانتظار...';
+            return 'الامتحان قيد التسليم التلقائي. يرجى الانتظار...';
+        };
+
+        window.addEventListener('beforeunload', preventUnload);
+
+        // Store cleanup function for later
+        modalOverlay.cleanup = () => {
+            window.removeEventListener('beforeunload', preventUnload);
+        };
 
         // Mark as submitted immediately to prevent further attempts
         examSubmitted = true;
         this.navigationPreventionActive = false;
 
-        // Countdown timer
+        // Countdown timer with safeguards
         let countdown = 10;
+        const startTime = Date.now();
         const countdownEl = modalOverlay.querySelector('#countdown-timer');
         const progressBar = modalOverlay.querySelector('#progress-bar');
 
         console.log('[ANTI-CHEAT] Starting 10-second countdown...');
 
         const countdownInterval = setInterval(() => {
-            countdown--;
-            countdownEl.textContent = countdown;
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const remaining = Math.max(0, 10 - elapsed);
+
+            countdownEl.textContent = remaining;
 
             // Update progress bar (10 seconds total, so 10% per second)
-            const progress = ((10 - countdown) / 10) * 100;
+            const progress = ((10 - remaining) / 10) * 100;
             progressBar.style.width = `${progress}%`;
 
-            if (countdown <= 0) {
+            if (remaining <= 0) {
                 clearInterval(countdownInterval);
                 console.log('[ANTI-CHEAT] Countdown complete, initiating auto-submission...');
                 // Call async submission and ensure it's awaited
                 this.performAutoSubmission(modalOverlay);
             }
-        }, 1000);
+        }, 100); // Check every 100ms for better accuracy
     },
 
     /**
      * Perform the actual auto-submission after countdown (async)
      */
     async performAutoSubmission(modalOverlay) {
-        // Update modal to show submission in progress
-        const modalContent = modalOverlay.querySelector('.cheat-modal-content');
-        modalContent.innerHTML = `
-            <div class="cheat-icon">⏳</div>
-            <h2>جاري تسليم الإجابات...</h2>
-            <p>يرجى الانتظار...</p>
-        `;
-
         console.log('[AUTO-SUBMIT] Starting submission process...');
 
-        // Call the finish quiz function (now async) to handle submission and Firebase
-        if (typeof finishQuiz === 'function') {
-            try {
-                await finishQuiz();
-                console.log('[AUTO-SUBMIT] Submission completed successfully');
-            } catch (error) {
-                console.error('[AUTO-SUBMIT] Submission error:', error);
-            }
-        }
+        try {
+            // Wait for full submission (includes Firebase + UI update)
+            await finishQuiz();
+            console.log('[AUTO-SUBMIT] Submission completed successfully');
 
-        // Remove modal after completion
-        if (modalOverlay.parentNode) {
-            modalOverlay.remove();
-            console.log('[AUTO-SUBMIT] Modal removed, navigated to results screen');
+            // Small delay to ensure UI updates properly, then remove modal
+            setTimeout(() => {
+                if (modalOverlay && modalOverlay.parentNode) {
+                    // Call cleanup before removing
+                    if (modalOverlay.cleanup) {
+                        modalOverlay.cleanup();
+                    }
+                    modalOverlay.remove();
+                    console.log('[AUTO-SUBMIT] Modal removed, user now on results screen');
+                }
+            }, 500);
+
+        } catch (error) {
+            console.error('[AUTO-SUBMIT] Error during submission:', error);
+
+            // Even if error → still go to results and remove modal
+            showScreen('results');
+            if (modalOverlay && modalOverlay.parentNode) {
+                // Call cleanup before removing
+                if (modalOverlay.cleanup) {
+                    modalOverlay.cleanup();
+                }
+                modalOverlay.remove();
+            }
         }
     },
     
@@ -1048,6 +1119,7 @@ const antiCheatSystem = {
         this.navigationPreventionActive = false;
         this.navigationAttemptCount = 0;
         examSubmitted = true;
+        console.log('[ANTI-CHEAT] Protection disabled');
     }
 };
 // ===================== END ANTI-CHEAT SYSTEM =====================
@@ -1156,7 +1228,7 @@ function startQuiz() {
     startTime = Date.now();
 
     // Start timer
-    timeRemaining = currentQuiz.length * 37.5;
+    timeRemaining = currentQuiz.length * 38; // 38 seconds per question
     startTimer();
 
     tabSwitchCount = 0;
