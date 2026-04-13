@@ -734,6 +734,21 @@ const topicNames = {
     hadith: 'العَرَبِيَّةُ ١'
 };
 
+// Progress Bar Helper
+function updateProgressBar(current, total) {
+    const bar = document.getElementById('progressBarFill');
+    if (bar && total > 0) {
+        const percent = Math.max(0, Math.min(100, (current / total) * 100));
+        bar.style.width = percent + '%';
+    }
+}
+
+const classMapping = {
+    easy: 'JSS 1',
+    medium: 'JSS 2',
+    hard: 'JSS 3'
+};
+
 
 // State
 let currentQuiz = [];
@@ -755,9 +770,19 @@ let examStarted = false;
 const antiCheatSystem = {
     navigationAttemptCount: 0,
     maxAttemptsBeforeAutoSubmit: 3,
-    isNavigationLocked: false,
     navigationPreventionActive: false,
+    isNavigationLocked: false,
     warningMessages: [],
+    activeWarningModal: null,
+    activeWarningInterval: null,
+    tabSwitchPending: false,
+    handlers: {
+        popstate: null,
+        beforeunload: null,
+        visibilitychange: null,
+        contextmenu: null,
+        keydown: null
+    },
 
     /**
      * Initialize anti-cheat protection when exam starts
@@ -774,15 +799,14 @@ const antiCheatSystem = {
      * Attach global event listeners for navigation attempts
      */
     attachGlobalListeners() {
-    this.handlers.popstate = (e) => this.handleNavigationAttempt('back/forward');
-    this.handlers.beforeunload = (e) => this.handleBeforeUnload(e);
-    this.handlers.visibilitychange = () => this.handleVisibilityChange();
+        this.handlers.popstate = (e) => this.handleNavigationAttempt('الزر الخلفي/الأمامي');
+        this.handlers.beforeunload = (e) => this.handleBeforeUnload(e);
+        this.handlers.visibilitychange = () => this.handleVisibilityChange();
 
-    window.addEventListener('popstate', this.handlers.popstate);
-    window.addEventListener('beforeunload', this.handlers.beforeunload);
-    document.addEventListener('visibilitychange', this.handlers.visibilitychange);
-},
-
+        window.addEventListener('popstate', this.handlers.popstate);
+        window.addEventListener('beforeunload', this.handlers.beforeunload);
+        document.addEventListener('visibilitychange', this.handlers.visibilitychange);
+    },
 
     /**
      * Handle back/forward button navigation attempts
@@ -790,10 +814,16 @@ const antiCheatSystem = {
     handleNavigationAttempt(source) {
         if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
 
-        // Push a new state to prevent actual back navigation
         history.pushState(null, null, window.location.href);
+        this.navigationAttemptCount++;
 
-        this.showNavigationWarning('الزر الخلفي/الأمامي');
+        const attemptsLeft = Math.max(0, this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount);
+        if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
+            this.autoSubmitExam('تم اكتشاف عدد كبير جداً من محاولات التنقل');
+            return;
+        }
+
+        this.showCheatWarningModal(`تم اكتشاف محاولة تنقل: ${source}`, attemptsLeft);
     },
 
     /**
@@ -802,13 +832,9 @@ const antiCheatSystem = {
     handleBeforeUnload(e) {
         if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
 
-        // Prevent default browser behavior
         e.preventDefault();
         e.returnValue = '';
-
-        // Log the attempt
-        this.navigationAttemptCount++;
-
+        this.handleNavigationAttempt('تحديث الصفحة / إغلاق التبويب');
         return '';
     },
 
@@ -820,122 +846,122 @@ const antiCheatSystem = {
 
         if (document.visibilityState === 'hidden') {
             this.navigationAttemptCount++;
-            this.showTabSwitchWarning();
+            this.tabSwitchPending = true;
+            if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
+                this.autoSubmitExam('تم اكتشاف عدد كبير جداً من محاولات تبديل التبويب');
+            }
+            return;
         }
-    },
 
-    reset() {
-        this.navigationAttemptCount = 0;
-        this.isNavigationLocked = false;
-        this.navigationPreventionActive = false;
-        this.warningMessages = [];
-    }
-    ,
-
-    /**
-     * Show warning dialog for navigation attempts
-     */
-    showNavigationWarning(source) {
-        this.navigationAttemptCount++;
-        const attemptsLeft = this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount;
-
-        let message = `⚠️ تحذير: لا يمكنك مغادرة الامتحان!\n\n`;
-        message += `محاولة التنقل عبر: ${source}\n`;
-        message += `محاولات متبقية: ${attemptsLeft}/${this.maxAttemptsBeforeAutoSubmit}\n\n`;
-        message += `إذا حاولت ${this.maxAttemptsBeforeAutoSubmit} مرات، سيتم تسليم إجاباتك تلقائياً!`;
-
-        alert(message);
-
-        // Auto-submit if max attempts exceeded
-        if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
-            this.autoSubmitExam('تجاوز عدد محاولات المغادرة المسموحة');
+        if (document.visibilityState === 'visible' && this.tabSwitchPending) {
+            const attemptsLeft = Math.max(0, this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount);
+            this.showCheatWarningModal('تم اكتشاف تبديل التبويب. يرجى العودة إلى نافذة الامتحان.', attemptsLeft);
+            this.tabSwitchPending = false;
         }
     },
 
     /**
-     * Show warning for tab switching
+     * Show cheat warning modal overlay
      */
-    showTabSwitchWarning() {
-        const attemptsLeft = this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount;
+    showCheatWarningModal(message, attemptsLeft, countdownSeconds = 5) {
+        if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
+        if (this.activeWarningModal) return;
 
-        let message = `⚠️ تحذير: تم اكتشاف تبديل التبويب!\n\n`;
-        message += `محاولات متبقية: ${attemptsLeft}/${this.maxAttemptsBeforeAutoSubmit}\n\n`;
-        message += `يرجى العودة إلى نافذة الامتحان فوراً!`;
-
-        // Show warning
-        const warningEl = document.createElement('div');
-        warningEl.className = 'tab-switch-warning';
-        warningEl.innerHTML = message.replace(/\n/g, '<br>');
-        warningEl.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #ff6b6b;
-            color: white;
-            padding: 20px;
-            border-radius: 8px;
-            z-index: 10000;
-            max-width: 400px;
-            font-size: 14px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            animation: slideIn 0.3s ease-out;
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'modal-overlay cheat-warning-modal';
+        modalOverlay.innerHTML = `
+            <div class="cheat-modal-content">
+                <div class="cheat-icon">⚠️</div>
+                <h2>تحذير: تم اكتشاف نشاط مشبوه</h2>
+                <p class="cheat-message">${message}</p>
+                <p class="cheat-message">المحاولات المتبقية: ${attemptsLeft}/${this.maxAttemptsBeforeAutoSubmit}</p>
+                <div class="cheat-countdown">
+                    <span id="warning-countdown">${countdownSeconds}</span>
+                    <span>ثانية متبقية</span>
+                </div>
+                <div class="cheat-progress">
+                    <div class="cheat-progress-bar" id="warning-progress-bar"></div>
+                </div>
+            </div>
         `;
 
-        document.body.appendChild(warningEl);
+        document.body.appendChild(modalOverlay);
+        modalOverlay.addEventListener('click', (e) => e.preventDefault());
+        modalOverlay.addEventListener('keydown', (e) => e.preventDefault());
+        modalOverlay.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // Auto-remove warning after 5 seconds
-        setTimeout(() => warningEl.remove(), 5000);
+        this.activeWarningModal = modalOverlay;
+        let countdown = countdownSeconds;
 
-        // Auto-submit if max attempts exceeded
-        if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
-            this.autoSubmitExam('تم تبديل التبويب أكثر من المحاولات المسموحة');
+        this.activeWarningInterval = setInterval(() => {
+            countdown--;
+            const countdownEl = modalOverlay.querySelector('#warning-countdown');
+            const progressBar = modalOverlay.querySelector('#warning-progress-bar');
+
+            if (countdownEl) countdownEl.textContent = String(countdown);
+            if (progressBar) {
+                const progress = ((countdownSeconds - countdown) / countdownSeconds) * 100;
+                progressBar.style.width = `${progress}%`;
+            }
+
+            if (countdown <= 0) {
+                this.clearActiveWarningModal();
+            }
+        }, 1000);
+    },
+
+    clearActiveWarningModal() {
+        if (this.activeWarningInterval) {
+            clearInterval(this.activeWarningInterval);
+            this.activeWarningInterval = null;
         }
+        if (this.activeWarningModal && this.activeWarningModal.parentNode) {
+            this.activeWarningModal.remove();
+        }
+        this.activeWarningModal = null;
     },
 
     /**
      * Block browser navigation mechanisms
      */
     blockBrowserNavigation() {
-        // Prevent right-click context menu
-        document.addEventListener('contextmenu', (e) => {
+        this.handlers.contextmenu = (e) => {
             if (examStarted && !examSubmitted) {
                 e.preventDefault();
                 return false;
             }
-        });
+        };
 
-        // Prevent keyboard shortcuts for browser navigation
-        document.addEventListener('keydown', (e) => {
+        this.handlers.keydown = (e) => {
             if (!examStarted || examSubmitted) return;
 
-            // Prevent Back button (Alt+Left or Backspace in some cases)
             if ((e.altKey && e.key === 'ArrowLeft') || (e.key === 'Backspace' && e.target !== document.activeElement)) {
                 e.preventDefault();
-                this.handleNavigationAttempt('Backspace key');
+                this.handleNavigationAttempt('مفتاح Backspace');
                 return false;
             }
 
-            // Prevent F5 (Refresh)
             if (e.key === 'F5') {
                 e.preventDefault();
-                this.showNavigationWarning('F5 (Refresh)');
+                this.handleNavigationAttempt('F5 (تحديث)');
                 return false;
             }
 
-            // Prevent Ctrl+R or Cmd+R (Refresh)
-            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
                 e.preventDefault();
-                this.showNavigationWarning('Ctrl+R (Refresh)');
+                this.handleNavigationAttempt('Ctrl+R (تحديث)');
                 return false;
             }
 
-            // Prevent Ctrl+W or Cmd+W (Close Tab)
-            if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
                 e.preventDefault();
-                this.showNavigationWarning('Ctrl+W (Close Tab)');
+                this.handleNavigationAttempt('Ctrl+W (إغلاق التبويب)');
                 return false;
             }
-        });
+        };
+
+        document.addEventListener('contextmenu', this.handlers.contextmenu);
+        document.addEventListener('keydown', this.handlers.keydown);
     },
 
     /**
@@ -948,15 +974,15 @@ const antiCheatSystem = {
         }
 
         console.log(`[ANTI-CHEAT] Cheating detected: ${reason}`);
+        this.clearActiveWarningModal();
 
-        // Create persistent modal overlay
         const modalOverlay = document.createElement('div');
-        modalOverlay.className = 'cheat-detection-modal';
+        modalOverlay.className = 'modal-overlay cheat-detection-modal';
         modalOverlay.innerHTML = `
             <div class="cheat-modal-content">
                 <div class="cheat-icon">❌</div>
-                <h2>تم اكتشاف محاولة غش!</h2>
-                <p class="cheat-reason">${reason}</p>
+                <h2>تم اكتشاف غش!</h2>
+                <p class="cheat-message">${reason}</p>
                 <p class="cheat-message">سيتم تسليم إجاباتك تلقائياً خلال 10 ثوانٍ...</p>
                 <div class="cheat-countdown">
                     <span id="countdown-timer">10</span>
@@ -968,32 +994,13 @@ const antiCheatSystem = {
             </div>
         `;
 
-        modalOverlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            z-index: 10001;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: 'Tajawal', 'Cairo', 'Amiri', 'Traditional Arabic', 'Segoe UI', sans-serif;
-            direction: rtl;
-        `;
-
         document.body.appendChild(modalOverlay);
-
-        // Prevent any user interaction
         modalOverlay.addEventListener('click', (e) => e.preventDefault());
         modalOverlay.addEventListener('keydown', (e) => e.preventDefault());
         modalOverlay.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // Mark as submitted immediately to prevent further attempts
         this.navigationPreventionActive = false;
 
-        // Countdown timer
         let countdown = 10;
         const countdownEl = modalOverlay.querySelector('#countdown-timer');
         const progressBar = modalOverlay.querySelector('#progress-bar');
@@ -1002,16 +1009,15 @@ const antiCheatSystem = {
 
         const countdownInterval = setInterval(() => {
             countdown--;
-            countdownEl.textContent = countdown;
-
-            // Update progress bar (10 seconds total, so 10% per second)
-            const progress = ((10 - countdown) / 10) * 100;
-            progressBar.style.width = `${progress}%`;
+            if (countdownEl) countdownEl.textContent = String(countdown);
+            if (progressBar) {
+                const progress = ((10 - countdown) / 10) * 100;
+                progressBar.style.width = `${progress}%`;
+            }
 
             if (countdown <= 0) {
                 clearInterval(countdownInterval);
                 console.log('[ANTI-CHEAT] Countdown complete, initiating auto-submission...');
-                // Call async submission and ensure it's awaited
                 this.performAutoSubmission(modalOverlay);
             }
         }, 1000);
@@ -1024,29 +1030,18 @@ const antiCheatSystem = {
         console.log('[AUTO-SUBMIT] Starting submission process...');
 
         try {
-            // IMPORTANT: wait for full submission (includes Firebase + UI update)
             await finishQuiz();
-
             console.log('[AUTO-SUBMIT] Submission completed, switching screen');
 
-            // SMALL DELAY ensures UI updates properly
             setTimeout(() => {
-                // Remove overlay AFTER screen switch
                 if (modalOverlay && modalOverlay.parentNode) {
                     modalOverlay.remove();
                 }
-
-                // FORCE results screen (extra safety)
                 showScreen('results');
-
             }, 300);
-
         } catch (error) {
             console.error('[AUTO-SUBMIT] Error during submission:', error);
-
-            // Even if error → still go to results
             showScreen('results');
-
             if (modalOverlay && modalOverlay.parentNode) {
                 modalOverlay.remove();
             }
@@ -1060,27 +1055,52 @@ const antiCheatSystem = {
         this.navigationPreventionActive = false;
         this.navigationAttemptCount = 0;
         examSubmitted = true;
+        this.clearActiveWarningModal();
     },
 
-    handlers: {},
-
+    /**
+     * Cleanup all event listeners safely
+     */
     cleanup() {
-    if (this.handlers.popstate) {
-        window.removeEventListener('popstate', this.handlers.popstate);
+        if (this.handlers.popstate) {
+            window.removeEventListener('popstate', this.handlers.popstate);
+            this.handlers.popstate = null;
+        }
+
+        if (this.handlers.beforeunload) {
+            window.removeEventListener('beforeunload', this.handlers.beforeunload);
+            this.handlers.beforeunload = null;
+        }
+
+        if (this.handlers.visibilitychange) {
+            document.removeEventListener('visibilitychange', this.handlers.visibilitychange);
+            this.handlers.visibilitychange = null;
+        }
+
+        if (this.handlers.contextmenu) {
+            document.removeEventListener('contextmenu', this.handlers.contextmenu);
+            this.handlers.contextmenu = null;
+        }
+
+        if (this.handlers.keydown) {
+            document.removeEventListener('keydown', this.handlers.keydown);
+            this.handlers.keydown = null;
+        }
+
+        this.clearActiveWarningModal();
+        this.reset();
+    },
+
+    /**
+     * Reset internal state
+     */
+    reset() {
+        this.navigationAttemptCount = 0;
+        this.isNavigationLocked = false;
+        this.navigationPreventionActive = false;
+        this.warningMessages = [];
+        this.tabSwitchPending = false;
     }
-
-    if (this.handlers.beforeunload) {
-        window.removeEventListener('beforeunload', this.handlers.beforeunload);
-    }
-
-    if (this.handlers.visibilitychange) {
-        document.removeEventListener('visibilitychange', this.handlers.visibilitychange);
-    }
-
-    this.reset();
-}
-
-
 };
 // ===================== END ANTI-CHEAT SYSTEM =====================
 
@@ -1105,7 +1125,8 @@ const startBtn = document.getElementById('startbtn');
 const nextBtn = document.getElementById('nextBtn');
 const quitBtn = document.getElementById('quitBtn');
 const restartBtn = document.getElementById('restartBtn');
-const questionSlider = document.getElementById('questionSlider');
+const selectedClassDisplay = document.getElementById('selectedClassDisplay');
+const studentNameDisplay = document.getElementById('studentNameDisplay');
 
 // Event Listeners
 topicBtns.forEach(btn => {
@@ -1184,21 +1205,36 @@ function startQuiz() {
         };
     });
 
+    // ✅ FIX: Shuffle options ONCE here
+    currentQuiz = currentQuiz.map(q => {
+        const shuffled = q.opts
+            .map((option, index) => ({ option, originalIndex: index }))
+            .sort(() => Math.random() - 0.5);
+
+        return {
+            ...q,
+            shuffledOptions: shuffled
+        };
+    });
+
     currentQuestion = 0;
     score = 0;
     selectedAnswers = new Array(currentQuiz.length).fill(null);
     startTime = Date.now();
 
     // Start timer
-    timeRemaining = currentQuiz.length * 38; // 38 seconds per question
+    timeRemaining = currentQuiz.length * 30;
     startTimer();
 
     tabSwitchCount = 0;
     examStarted = true;
+    examSubmitted = false;
     antiCheatSystem.init(); // Initialize anti-cheat protection
     showScreen('quiz');
+    quitBtn.disabled = false;
+    selectedClassDisplay.textContent = classMapping[selectedDifficulty] || 'JSS 2';
     displayQuestion();
-    document.getElementById('studentNameHeader').textContent = studentName;
+    document.getElementById('studentNameDisplay').textContent = studentName;
 }
 function startTimer() {
     const timerEl = document.getElementById('timer');
@@ -1231,6 +1267,9 @@ function displayQuestion() {
     // Sync slider
     questionSlider.value = currentQuestion + 1;
     questionSlider.max = currentQuiz.length;
+
+    // Update class display
+    selectedClassDisplay.textContent = classMapping[selectedDifficulty] || 'JSS 2';
 
     const optionsContainer = document.getElementById('options');
     optionsContainer.innerHTML = '';
@@ -1276,15 +1315,19 @@ function displayQuestion() {
         optionsContainer.appendChild(optionWrapper);
     });
 
-    nextBtn.textContent =
-        currentQuestion === currentQuiz.length - 1
-            ? 'تسليم الاختبار'
-            : 'السؤال التالي';
-
     // Previous button control
     if (prevBtn) {
         prevBtn.disabled = currentQuestion === 0;
     }
+}
+
+function showTemporaryQuizMessage(message) {
+    if (!quizMessageEl) return;
+    quizMessageEl.textContent = message;
+    clearTimeout(showTemporaryQuizMessage.timeoutId);
+    showTemporaryQuizMessage.timeoutId = setTimeout(() => {
+        quizMessageEl.textContent = '';
+    }, 3500);
 }
 
 function nextQuestion() {
@@ -1292,10 +1335,7 @@ function nextQuestion() {
         currentQuestion++;
         displayQuestion();
     } else {
-        const confirmSubmit = confirm('هل أنت متأكد من أنك تريد تسليم امتحانك؟ لا يمكنك تغيير إجاباتك بعد التسليم.');
-        if (confirmSubmit) {
-            finishQuiz();
-        }
+        showTemporaryQuizMessage('لقد وصلت إلى السؤال الأخير. استخدم زر تسليم الامتحان عندما تكون جاهزاً.');
     }
 }
 
@@ -1486,21 +1526,23 @@ function saveScoreToServer(name, score, classLevel, totalQuestions) {
 // View saved scores in Firebase Console → Firestore → cbt_scores
 
 function quitQuiz() {
-    if (confirm('هل أنت متأكد من الخروج؟ سيتم فقدان تقدمك.')) {
-        clearInterval(timerInterval);
-        restartQuiz();
+    const confirmSubmit = confirm('هل أنت متأكد من أنك تريد تسليم امتحانك؟ لا يمكنك تغيير إجاباتك بعد التسليم.');
+    if (confirmSubmit) {
+        finishQuiz();
     }
 }
 
 function restartQuiz() {
+    // === CLEANUP ANTI-CHEAT FIRST ===
+    antiCheatSystem.cleanup();
+    antiCheatSystem.reset();
 
     studentName = '';
+    document.getElementById('studentNameDisplay').textContent = '';
     tabSwitchCount = 0;
     examSubmitted = false;
     examStarted = false;
     document.body.style.pointerEvents = ''; // Unlock interaction
-
-    antiCheatSystem.reset();
 
     currentQuiz = [];
     currentQuestion = 0;

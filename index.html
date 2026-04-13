@@ -124,19 +124,17 @@
 
         <!-- Quiz Screen -->
         <div id="quizScreen" class="screen">
-
             <div class="quiz-header">
-                <div class="quiz-header-row">
-                    <div class="progress"> <span id="currentQuestion">1</span> من <span id="totalQuestions">10</span> </div>
-                    <div class="progress student-name-display" id="studentNameHeader">--</div>
+                <div class="progress">
+                    <span class="progress-item progress-question">السؤال <span id="currentQuestion">1</span> من <span id="totalQuestions">10</span></span>
+                    <span class="progress-item progress-class" id="selectedClassDisplay">JSS 2</span>
+                    <span class="progress-item progress-student" id="studentNameDisplay"></span>
                 </div>
-
                 <div class="progress-bar-container">
                     <div class="progress-bar-bg">
                         <div class="progress-bar-fill" id="progressBarFill"></div>
                     </div>
                 </div>
-
                 <div class="timer" id="timer">00:00</div>
             </div>
 
@@ -155,8 +153,9 @@
                 <button id="prevBtn" class="btn btn-prev">السؤال السابق</button>
                 <button id="nextBtn" class="btn">السؤال التالي</button>
             </div>
+            <div id="quizMessage" class="quiz-message"></div>
 
-            <button class="btn btn-secondary" id="quitBtn" disabled>الخروج من الاختبار</button>
+            <button class="btn btn-secondary submit-btn" id="quitBtn">تسليم الاختبار</button>
         </div>
 
         <!-- Results Screen -->

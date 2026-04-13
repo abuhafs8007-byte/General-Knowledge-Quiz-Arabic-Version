@@ -248,9 +248,33 @@ select:focus {
 
 .progress {
     color: #667eea;
-    font-weight: 700;
-    font-family: var(--font-arabic-secondary);
-    font-size: 14px;
+    font-weight: 600;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+}
+
+.progress-item {
+    color: #667eea;
+    font-weight: 600;
+}
+
+.progress-question {
+    text-align: left;
+}
+
+.progress-class {
+    text-align: center;
+}
+
+.progress-student {
+    text-align: right;
+}
+
+#studentNameDisplay {
+    color: inherit;
+    font-weight: inherit;
 }
 
 .timer {
@@ -505,6 +529,14 @@ hr.scrMsg2 {
     justify-content: center;
     align-items: center;
     z-index: 10000;
+}
+
+.quiz-message {
+    color: #4f46e5;
+    font-size: 0.95rem;
+    text-align: center;
+    padding: 8px 0 0;
+    min-height: 20px;
 }
 
 .modal-box {
