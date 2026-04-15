@@ -34,31 +34,6 @@
     <meta name="twitter:image"
         content="https://raw.githubusercontent.com/abuhafs8007-byte/General-Knowledge-Quiz-Arabic-Version/refs/heads/main/Meta%20Arabic.png">
 
-    <!-- Firebase CDN -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-
-        // Placeholder Firebase config - replace with your actual config
-        const firebaseConfig = {
-            apiKey: "AIzaSyAJaem6_icKmg04_SoiSyWrWBAiLC7TSPU",
-            authDomain: "cbt-exam-eng.firebaseapp.com",
-            projectId: "cbt-exam-eng",
-            storageBucket: "cbt-exam-eng.firebasestorage.app",
-            messagingSenderId: "138024431357",
-            appId: "1:138024431357:web:0347c448991e28fc6fd894",
-            measurementId: "G-FYBM55P9JD"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        window.db = db;
-
-        window.addDoc = addDoc;
-        window.collection = collection;
-
-
-    </script>
 </head>
 
 <body class="notranslate">
@@ -222,6 +197,32 @@
     <!-- Audio -->
     <audio id="passSound" src="Successes.mp3"></audio>
     <audio id="failSound" src="Failure.mp3"></audio>
+
+    <!-- Firebase CDN -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        // Placeholder Firebase config - replace with your actual config
+        const firebaseConfig = {
+            apiKey: "AIzaSyAJaem6_icKmg04_SoiSyWrWBAiLC7TSPU",
+            authDomain: "cbt-exam-eng.firebaseapp.com",
+            projectId: "cbt-exam-eng",
+            storageBucket: "cbt-exam-eng.firebasestorage.app",
+            messagingSenderId: "138024431357",
+            appId: "1:138024431357:web:0347c448991e28fc6fd894",
+            measurementId: "G-FYBM55P9JD"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        window.db = db;
+
+        window.addDoc = addDoc;
+        window.collection = collection;
+
+
+    </script>
 
     <script src="failEffect.js" defer></script>
     <script src="script.js" defer></script>
