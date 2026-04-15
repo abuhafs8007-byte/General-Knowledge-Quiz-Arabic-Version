@@ -766,7 +766,52 @@ let tabSwitchCount = 0;
 let examSubmitted = false;
 let examStarted = false;
 
-// ==================== ANTI-CHEAT SYSTEM ====================
+const startScreen = document.getElementById('startScreen');
+const quizScreen = document.getElementById('quizScreen');
+const resultsScreen = document.getElementById('resultsScreen');
+
+const numQuestionsInput = document.getElementById('numQuestions');
+const difficultyBtns = document.querySelectorAll('.difficulty-btn');
+const topicBtns = document.querySelectorAll('.topic-btn');
+const startBtn = document.getElementById('startbtn');
+const nextBtn = document.getElementById('nextBtn');
+const quitBtn = document.getElementById('quitBtn');
+const restartBtn = document.getElementById('restartBtn');
+const prevBtn = document.getElementById('prevBtn');
+const questionSlider = document.getElementById('questionSlider');
+const selectedClassDisplay = document.getElementById('selectedClassDisplay');
+const quizMessageEl = document.getElementById('quizMessage');
+
+topicBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        topicBtns.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedTopic = btn.dataset.topic;
+    });
+});
+
+difficultyBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        difficultyBtns.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedDifficulty = btn.dataset.difficulty;
+    });
+});
+
+startBtn.addEventListener('click', startQuiz);
+nextBtn.addEventListener('click', nextQuestion);
+quitBtn.addEventListener('click', quitQuiz);
+restartBtn.addEventListener('click', restartQuiz);
+prevBtn.addEventListener('click', prevQuestion);
+
+questionSlider.addEventListener('input', (e) => {
+    const targetQuestion = parseInt(e.target.value, 10) - 1;
+    if (!Number.isNaN(targetQuestion) && targetQuestion !== currentQuestion && targetQuestion >= 0 && targetQuestion < currentQuiz.length) {
+        currentQuestion = targetQuestion;
+        displayQuestion();
+    }
+});
+
 const antiCheatSystem = {
     navigationAttemptCount: 0,
     maxAttemptsBeforeAutoSubmit: 3,
@@ -784,9 +829,6 @@ const antiCheatSystem = {
         keydown: null
     },
 
-    /**
-     * Initialize anti-cheat protection when exam starts
-     */
     init() {
         if (examStarted && !examSubmitted) {
             this.navigationPreventionActive = true;
@@ -795,11 +837,8 @@ const antiCheatSystem = {
         }
     },
 
-    /**
-     * Attach global event listeners for navigation attempts
-     */
     attachGlobalListeners() {
-        this.handlers.popstate = (e) => this.handleNavigationAttempt('الزر الخلفي/الأمامي');
+        this.handlers.popstate = (e) => this.handleNavigationAttempt('محاولة التنقل إلى الخلف/الأمام');
         this.handlers.beforeunload = (e) => this.handleBeforeUnload(e);
         this.handlers.visibilitychange = () => this.handleVisibilityChange();
 
@@ -808,9 +847,6 @@ const antiCheatSystem = {
         document.addEventListener('visibilitychange', this.handlers.visibilitychange);
     },
 
-    /**
-     * Handle back/forward button navigation attempts
-     */
     handleNavigationAttempt(source) {
         if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
 
@@ -819,28 +855,22 @@ const antiCheatSystem = {
 
         const attemptsLeft = Math.max(0, this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount);
         if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
-            this.autoSubmitExam('تم اكتشاف عدد كبير جداً من محاولات التنقل');
+            this.autoSubmitExam('تم اكتشاف العديد من محاولات الغش');
             return;
         }
 
-        this.showCheatWarningModal(`تم اكتشاف محاولة تنقل: ${source}`, attemptsLeft);
+        this.showCheatWarningModal(source, attemptsLeft);
     },
 
-    /**
-     * Handle beforeunload event (page refresh, close tab, navigate away)
-     */
     handleBeforeUnload(e) {
         if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
 
         e.preventDefault();
         e.returnValue = '';
-        this.handleNavigationAttempt('تحديث الصفحة / إغلاق التبويب');
+        this.handleNavigationAttempt('تحديث الصفحة / إغلاق');
         return '';
     },
 
-    /**
-     * Handle tab/window visibility changes
-     */
     handleVisibilityChange() {
         if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
 
@@ -848,21 +878,18 @@ const antiCheatSystem = {
             this.navigationAttemptCount++;
             this.tabSwitchPending = true;
             if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
-                this.autoSubmitExam('تم اكتشاف عدد كبير جداً من محاولات تبديل التبويب');
+                this.autoSubmitExam('تم اكتشاف العديد من محاولات تبديل التبويب');
             }
             return;
         }
 
         if (document.visibilityState === 'visible' && this.tabSwitchPending) {
             const attemptsLeft = Math.max(0, this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount);
-            this.showCheatWarningModal('تم اكتشاف تبديل التبويب. يرجى العودة إلى نافذة الامتحان.', attemptsLeft);
+            this.showCheatWarningModal('تم تبديل التبويب. الرجاء العودة إلى نافذة الامتحان.', attemptsLeft);
             this.tabSwitchPending = false;
         }
     },
 
-    /**
-     * Show cheat warning modal overlay
-     */
     showCheatWarningModal(message, attemptsLeft, countdownSeconds = 5) {
         if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
         if (this.activeWarningModal) return;
@@ -874,10 +901,10 @@ const antiCheatSystem = {
                 <div class="cheat-icon">⚠️</div>
                 <h2>تحذير: تم اكتشاف نشاط مشبوه</h2>
                 <p class="cheat-message">${message}</p>
-                <p class="cheat-message">المحاولات المتبقية: ${attemptsLeft}/${this.maxAttemptsBeforeAutoSubmit}</p>
+                <p class="cheat-message">محاولات متبقية: ${attemptsLeft}/${this.maxAttemptsBeforeAutoSubmit}</p>
                 <div class="cheat-countdown">
                     <span id="warning-countdown">${countdownSeconds}</span>
-                    <span>ثانية متبقية</span>
+                    <span>ثوانٍ متبقية</span>
                 </div>
                 <div class="cheat-progress">
                     <div class="cheat-progress-bar" id="warning-progress-bar"></div>
@@ -921,9 +948,6 @@ const antiCheatSystem = {
         this.activeWarningModal = null;
     },
 
-    /**
-     * Block browser navigation mechanisms
-     */
     blockBrowserNavigation() {
         this.handlers.contextmenu = (e) => {
             if (examStarted && !examSubmitted) {
@@ -937,7 +961,7 @@ const antiCheatSystem = {
 
             if ((e.altKey && e.key === 'ArrowLeft') || (e.key === 'Backspace' && e.target !== document.activeElement)) {
                 e.preventDefault();
-                this.handleNavigationAttempt('مفتاح Backspace');
+                this.handleNavigationAttempt('Backspace');
                 return false;
             }
 
@@ -964,9 +988,6 @@ const antiCheatSystem = {
         document.addEventListener('keydown', this.handlers.keydown);
     },
 
-    /**
-     * Auto-submit exam when cheating is detected
-     */
     autoSubmitExam(reason) {
         if (examSubmitted) {
             console.log('[ANTI-CHEAT] Auto-submit already initiated, skipping duplicate');
@@ -983,10 +1004,10 @@ const antiCheatSystem = {
                 <div class="cheat-icon">❌</div>
                 <h2>تم اكتشاف غش!</h2>
                 <p class="cheat-message">${reason}</p>
-                <p class="cheat-message">سيتم تسليم إجاباتك تلقائياً خلال 10 ثوانٍ...</p>
+                <p class="cheat-message">سيتم تسليم الامتحان تلقائياً خلال 10 ثوانٍ...</p>
                 <div class="cheat-countdown">
                     <span id="countdown-timer">10</span>
-                    <span>ثانية متبقية</span>
+                    <span>ثوانٍ متبقية</span>
                 </div>
                 <div class="cheat-progress">
                     <div class="cheat-progress-bar" id="progress-bar"></div>
@@ -1005,8 +1026,6 @@ const antiCheatSystem = {
         const countdownEl = modalOverlay.querySelector('#countdown-timer');
         const progressBar = modalOverlay.querySelector('#progress-bar');
 
-        console.log('[ANTI-CHEAT] Starting 10-second countdown...');
-
         const countdownInterval = setInterval(() => {
             countdown--;
             if (countdownEl) countdownEl.textContent = String(countdown);
@@ -1017,22 +1036,14 @@ const antiCheatSystem = {
 
             if (countdown <= 0) {
                 clearInterval(countdownInterval);
-                console.log('[ANTI-CHEAT] Countdown complete, initiating auto-submission...');
                 this.performAutoSubmission(modalOverlay);
             }
         }, 1000);
     },
 
-    /**
-     * Perform the actual auto-submission after countdown (async)
-     */
     async performAutoSubmission(modalOverlay) {
-        console.log('[AUTO-SUBMIT] Starting submission process...');
-
         try {
             await finishQuiz();
-            console.log('[AUTO-SUBMIT] Submission completed, switching screen');
-
             setTimeout(() => {
                 if (modalOverlay && modalOverlay.parentNode) {
                     modalOverlay.remove();
@@ -1040,7 +1051,6 @@ const antiCheatSystem = {
                 showScreen('results');
             }, 300);
         } catch (error) {
-            console.error('[AUTO-SUBMIT] Error during submission:', error);
             showScreen('results');
             if (modalOverlay && modalOverlay.parentNode) {
                 modalOverlay.remove();
@@ -1048,9 +1058,6 @@ const antiCheatSystem = {
         }
     },
 
-    /**
-     * Disable anti-cheat protection (called after quiz is submitted)
-     */
     disable() {
         this.navigationPreventionActive = false;
         this.navigationAttemptCount = 0;
@@ -1058,9 +1065,6 @@ const antiCheatSystem = {
         this.clearActiveWarningModal();
     },
 
-    /**
-     * Cleanup all event listeners safely
-     */
     cleanup() {
         if (this.handlers.popstate) {
             window.removeEventListener('popstate', this.handlers.popstate);
@@ -1091,9 +1095,6 @@ const antiCheatSystem = {
         this.reset();
     },
 
-    /**
-     * Reset internal state
-     */
     reset() {
         this.navigationAttemptCount = 0;
         this.isNavigationLocked = false;
@@ -1102,64 +1103,6 @@ const antiCheatSystem = {
         this.tabSwitchPending = false;
     }
 };
-// ===================== END ANTI-CHEAT SYSTEM =====================
-
-// Progress Bar Helper
-function updateProgressBar(current, total) {
-    const bar = document.getElementById('progressBarFill');
-    if (bar && total > 0) {
-        const percent = Math.max(0, Math.min(100, (current / total) * 100));
-        bar.style.width = percent + '%';
-    }
-}
-
-// Elements
-const startScreen = document.getElementById('startScreen');
-const quizScreen = document.getElementById('quizScreen');
-const resultsScreen = document.getElementById('resultsScreen');
-
-const numQuestionsInput = document.getElementById('numQuestions');
-const difficultyBtns = document.querySelectorAll('.difficulty-btn');
-const topicBtns = document.querySelectorAll('.topic-btn');
-const startBtn = document.getElementById('startbtn');
-const nextBtn = document.getElementById('nextBtn');
-const quitBtn = document.getElementById('quitBtn');
-const restartBtn = document.getElementById('restartBtn');
-const selectedClassDisplay = document.getElementById('selectedClassDisplay');
-const studentNameDisplay = document.getElementById('studentNameDisplay');
-
-// Event Listeners
-topicBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-        topicBtns.forEach(b => b.classList.remove('selected'))
-        btn.classList.add('selected')
-        selectedTopic = btn.dataset.topic
-    });
-});
-
-difficultyBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-        difficultyBtns.forEach(b => b.classList.remove('selected'))
-        btn.classList.add('selected')
-        selectedDifficulty = btn.dataset.difficulty
-    });
-});
-
-startBtn.addEventListener('click', startQuiz);
-nextBtn.addEventListener('click', nextQuestion);
-quitBtn.addEventListener('click', quitQuiz);
-restartBtn.addEventListener('click', restartQuiz);
-const prevBtn = document.getElementById('prevBtn');
-prevBtn.addEventListener('click', prevQuestion);
-
-// Question slider navigation
-questionSlider.addEventListener('input', (e) => {
-    const targetQuestion = parseInt(e.target.value, 10) - 1;
-    if (!Number.isNaN(targetQuestion) && targetQuestion !== currentQuestion && targetQuestion >= 0 && targetQuestion < currentQuiz.length) {
-        currentQuestion = targetQuestion;
-        displayQuestion();
-    }
-});
 
 function startQuiz() {
 
@@ -1193,19 +1136,7 @@ function startQuiz() {
         }
     }
 
-    // ✅ FIX: Shuffle options ONCE here
-    currentQuiz = currentQuiz.map(q => {
-        const shuffled = q.opts
-            .map((option, index) => ({ option, originalIndex: index }))
-            .sort(() => Math.random() - 0.5);
-
-        return {
-            ...q,
-            shuffledOptions: shuffled
-        };
-    });
-
-    // ✅ FIX: Shuffle options ONCE here
+    // Shuffle options ONLY once per question set
     currentQuiz = currentQuiz.map(q => {
         const shuffled = q.opts
             .map((option, index) => ({ option, originalIndex: index }))
