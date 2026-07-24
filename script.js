@@ -662,8 +662,28 @@ const quizData = {
         ]
     },
     hadith: {
-        easy: [{ q: "اخْتَرِ التَّرْجَمَةَ الصَّحِيحَةَ لِلْكَلِمَةِ: بَطَّةٌ", opts: ["Cow", "Duck", "Goat", "Bird"], ans: 1 }, { q: "مَا هُوَ المَعْنَى الصَّحِيحُ لِكَلِمَةِ: بَعُوضَةٌ؟", opts: ["Ant", "Bee", "Mosquito", "Fly"], ans: 2 }, { q: "اخْتَرِ الْمَعْنَى الْمُنَاسِبَ لِلْكَلِمَةِ: قَلَمٌ", opts: ["Pen", "Book", "Table", "Chair"], ans: 0 }, { q: "مَا التَّرْجَمَةُ الصَّحِيحَةُ لِكَلِمَةِ: طَبَاشِيرُ؟", opts: ["Chalk", "Pencil", "Eraser", "Marker"], ans: 0 }, { q: "اخْتَرْ الْمَعْنَى الصَّحِيحَ لِكَلِمَةِ: عِلْكَةٌ", opts: ["Gum", "Candy", "Juice", "Bread"], ans: 0 }, { q: "مَا مَعْنَى كَلِمَةِ: Apple ؟", opts: ["تُفَّاحَةٌ", "مَوْزَةٌ", "بُرْتُقَالَةٌ", "عِنَبٌ"], ans: 0 }, { q: "اخْتَرِ التَّرْجَمَةَ الصَّحِيحَةَ لِكَلِمَةِ: Flower", opts: ["شَجَرَةٌ", "زَهْرَةٌ", "نَبَاتٌ", "وَرَقَةٌ"], ans: 1 }, { q: "مَا الْمَعْنَى الْمُنَاسِبُ لِكَلِمَةِ: Sugarcane ؟", opts: ["قَصَبُ السُّكَّرِ", "تَمْرٌ", "رُزٌّ", "قَمْحٌ"], ans: 0 }, { q: "اخْتَرِ التَّرْجَمَةَ الصَّحِيحَةَ لِكَلِمَةِ: Cucumber", opts: ["طَمَاطِمُ", "خِيَارٌ", "جَزَرٌ", "بَطَاطِسُ"], ans: 1 }, { q: "مَا مَعْنَى كَلِمَةِ: Hen ؟", opts: ["دِيكٌ", "بَقَرَةٌ", "دَجَاجَةٌ", "حِصَانٌ"], ans: 2 }],
-
+        easy: [
+            { q: "ما معنى رف؟", opts: ["Shelf", "Generator", "Window", "Table"], ans: 0 },
+            { q: "ما معنى مولد كهربائي؟", opts: ["Generator", "Chair", "Hospital", "Street"], ans: 0 },
+            { q: "ما معنى نافذة؟", opts: ["Door", "Window", "Roof", "Wall"], ans: 1 },
+            { q: "ما معنى ذلك خياط؟", opts: ["That is a teacher", "That is a tailor", "That is a driver", "That is a trader"], ans: 1 },
+            { q: "ما معنى ذلك سائق؟", opts: ["That is a driver", "That is a doctor", "That is a tailor", "That is a farmer"], ans: 0 },
+            { q: "ما معنى مصباح؟", opts: ["Lamp", "Book", "Chair", "Bed"], ans: 0 },
+            { q: "ما معنى سرير؟", opts: ["Desk", "Bed", "Shelf", "Cupboard"], ans: 1 },
+            { q: "ما معنى مهندسة؟", opts: ["Female teacher", "Female engineer", "Female nurse", "Female trader"], ans: 1 },
+            { q: "ما معنى تلك معلمة؟", opts: ["That is a female doctor", "That is a female teacher", "That is a female trader", "That is a female driver"], ans: 1 },
+            { q: "من معنى مدرسة", opts: ["Female driver", "Female trader", "Female teacher", "Female nurse"], ans: 2 },
+            { q: "ما معنى سائقة؟", opts: ["Female driver", "Female teacher", "Female trader", "Female engineer"], ans: 0 },
+            { q: "ما معنى تاجرة؟", opts: ["Female nurse", "Female trader", "Female teacher", "Female driver"], ans: 1 },
+            { q: "ما معنى معلمة؟", opts: ["Female doctor", "Female engineer", "Female teacher", "Female farmer"], ans: 2 },
+            { q: "ما معنى ممرضة؟", opts: ["Female trader", "Female driver", "Female teacher", "Female nurse"], ans: 3 },
+            { q: "ما معنى سوق؟", opts: ["Market", "Bakery", "Restaurant", "Bank"], ans: 0 },
+            { q: "ما معنى مخبز؟", opts: ["Market", "Restaurant", "Bakery", "Bank"], ans: 2 },
+            { q: "ما معنى مطعم؟", opts: ["Bank", "Restaurant", "Bakery", "Market"], ans: 1 },
+            { q: "ما معنى بنك؟", opts: ["School", "Mosque", "Bank", "Hospital"], ans: 2 },
+            { q: "ما معنى مكتب", opts: ["Chair", "Desk", "Shelf", "Table"], ans: 3 },
+            { q: "ما معنى مسجد؟", opts: ["School", "Mosque", "Hospital", "Library"], ans: 1 }
+        ],
         medium: [
             { q: "ما مَعْنَى هٰذِهِ الْجُمْلَةِ: «هٰذَا وَلَدٌ»؟", opts: ["This is a boy", "This is a girl", "This is a man", "This is a teacher"], ans: 0 },
             { q: "مَا جَمْعُ كَلِمَةِ «بِنْتٌ»؟", opts: ["بَنَاتٌ", "بُنُوتٌ", "بِنْتَاتٌ", "بَنِينٌ"], ans: 0 },
