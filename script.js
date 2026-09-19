@@ -1167,7 +1167,7 @@ function startQuiz() {
     startTime = Date.now();
 
     // Start timer
-    timeRemaining = currentQuiz.length * 30;
+     timeRemaining = currentQuiz.length * 40;
     startTimer();
 
     tabSwitchCount = 0;
