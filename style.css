@@ -272,6 +272,11 @@ select:focus {
     text-align: right;
 }
 
+.progress-topic {
+    grid-column: 1 / -1;
+    text-align: center;
+}
+
 #studentNameDisplay {
     color: inherit;
     font-weight: inherit;
