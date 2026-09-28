@@ -1300,6 +1300,8 @@ let selectedAnswers = [];
 let timeRemaining = 0;
 let timerInterval = null;
 let startTime = 0;
+const SECONDS_PER_QUESTION = 40;
+let visitedQuestions = [];
 
 let studentName = '';
 let tabSwitchCount = 0;
@@ -1319,24 +1321,37 @@ const quitBtn = document.getElementById('quitBtn');
 const restartBtn = document.getElementById('restartBtn');
 const prevBtn = document.getElementById('prevBtn');
 const questionSlider = document.getElementById('questionSlider');
+const questionPalette = document.getElementById('questionPalette');
+const paletteProgress = document.getElementById('paletteProgress');
+const durationPreview = document.getElementById('durationPreview');
 const selectedClassDisplay = document.getElementById('selectedClassDisplay');
 const selectedTopicDisplay = document.getElementById('selectedTopicDisplay');
 const quizMessageEl = document.getElementById('quizMessage');
 
 topicBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-        topicBtns.forEach(b => b.classList.remove('selected'));
+        topicBtns.forEach(b => {
+            b.classList.remove('selected');
+            b.setAttribute('aria-pressed', 'false');
+        });
         btn.classList.add('selected');
+        btn.setAttribute('aria-pressed', 'true');
         selectedTopic = btn.dataset.topic;
         selectedTopicDisplay.textContent = topicNames[selectedTopic];
+        updateDurationPreview();
     });
 });
 
 difficultyBtns.forEach(btn => {
     btn.addEventListener('click', () => {
-        difficultyBtns.forEach(b => b.classList.remove('selected'));
+        difficultyBtns.forEach(b => {
+            b.classList.remove('selected');
+            b.setAttribute('aria-pressed', 'false');
+        });
         btn.classList.add('selected');
+        btn.setAttribute('aria-pressed', 'true');
         selectedDifficulty = btn.dataset.difficulty;
+        updateDurationPreview();
     });
 });
 
@@ -1353,6 +1368,15 @@ questionSlider.addEventListener('input', (e) => {
         displayQuestion();
     }
 });
+
+questionPalette.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-question-index]');
+    if (!button) return;
+    currentQuestion = Number(button.dataset.questionIndex);
+    displayQuestion();
+});
+
+numQuestionsInput.addEventListener('input', updateDurationPreview);
 
 const antiCheatSystem = {
     navigationAttemptCount: 0,
@@ -1648,8 +1672,8 @@ const antiCheatSystem = {
 
 function startQuiz() {
 
+    if (examStarted || examSubmitted) return;
     antiCheatSystem.reset();
-    // === ADD THIS ===
     studentName = document.getElementById('studentName').value.trim();
     if (!studentName) {
         alert('يرجى إدخال اسمك!');
@@ -1661,14 +1685,30 @@ function startQuiz() {
         return;
     }
 
-    const numQuestion = parseInt(numQuestionsInput.value)
-    if (numQuestion < 5 || numQuestion > 40) {
+    let numQuestion = Number.parseInt(numQuestionsInput.value, 10);
+    if (!Number.isInteger(numQuestion) || numQuestion < 5 || numQuestion > 40) {
         alert('يرجى إدخال عدد بين 5 و 40!');
         return;
     }
 
-    // Get questions
-    const topicQuestions = quizData[selectedTopic][selectedDifficulty];
+    const topic = quizData[selectedTopic];
+    const topicQuestions = topic && topic[selectedDifficulty];
+    if (!Array.isArray(topicQuestions) || topicQuestions.length === 0) {
+        alert('لا توجد أسئلة متاحة للمادة والمرحلة المحددتين. يرجى اختيار مادة أخرى.');
+        return;
+    }
+    if (numQuestion > topicQuestions.length) {
+        numQuestion = topicQuestions.length;
+        numQuestionsInput.value = String(numQuestion);
+        updateDurationPreview();
+    }
+    if (topicQuestions.some(question => !question || typeof question.q !== 'string' ||
+        !Array.isArray(question.opts) || question.opts.length !== 4 ||
+        !Number.isInteger(question.ans) || question.ans < 0 || question.ans >= question.opts.length)) {
+        alert('تعذر بدء الاختبار بسبب مشكلة في بيانات الأسئلة. يرجى إبلاغ مسؤول النظام.');
+        return;
+    }
+
     currentQuiz = [];
 
     while (currentQuiz.length < numQuestion && currentQuiz.length < topicQuestions.length) {
@@ -1693,44 +1733,58 @@ function startQuiz() {
     currentQuestion = 0;
     score = 0;
     selectedAnswers = new Array(currentQuiz.length).fill(null);
+    visitedQuestions = new Array(currentQuiz.length).fill(false);
     startTime = Date.now();
 
-    // Start timer
-    timeRemaining = currentQuiz.length * 45;
+    timeRemaining = currentQuiz.length * SECONDS_PER_QUESTION;
+    examStarted = true;
+    examSubmitted = false;
     startTimer();
 
     tabSwitchCount = 0;
-    examStarted = true;
-    examSubmitted = false;
     antiCheatSystem.init(); // Initialize anti-cheat protection
     showScreen('quiz');
     quitBtn.disabled = false;
+    document.getElementById('toggleReviewBtn').disabled = true;
     selectedClassDisplay.textContent = classMapping[selectedDifficulty] || 'JSS 2';
     displayQuestion();
     document.getElementById('studentNameDisplay').textContent = studentName;
 }
 function startTimer() {
+    if (!examStarted || examSubmitted || timerInterval !== null) return;
     const timerEl = document.getElementById('timer');
-    timerInterval = setInterval(() => {
-        timeRemaining--;
+    const examDeadline = Date.now() + timeRemaining * 1000;
+
+    const updateTimer = () => {
+        timeRemaining = Math.max(0, Math.ceil((examDeadline - Date.now()) / 1000));
         const minutes = Math.floor(timeRemaining / 60);
         const seconds = timeRemaining % 60;
         timerEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        timerEl.classList.toggle('warning', timeRemaining <= 30);
 
-        if (timeRemaining <= 30) {
-            timerEl.classList.add('warning');
-        } else {
-            timerEl.classList.remove('warning');
-        }
-
-        if (timeRemaining <= 0) {
+        if (timeRemaining === 0) {
+            clearInterval(timerInterval);
+            timerInterval = null;
             finishQuiz();
         }
+    };
+
+    updateTimer();
+    if (timeRemaining === 0) return;
+    timerInterval = setInterval(() => {
+        if (!examStarted || examSubmitted) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            return;
+        }
+        updateTimer();
     }, 1000);
 }
 
 function displayQuestion() {
     const question = currentQuiz[currentQuestion];
+    if (!question) return;
+    visitedQuestions[currentQuestion] = true;
 
     document.getElementById('questionText').textContent = question.q;
     document.getElementById('currentQuestion').textContent = currentQuestion + 1;
@@ -1757,6 +1811,7 @@ function displayQuestion() {
         radio.type = 'radio';
         radio.name = 'answer';
         radio.value = originalIndex;
+        radio.setAttribute('aria-label', option);
 
         if (selectedAnswers[currentQuestion] === originalIndex) {
             radio.checked = true;
@@ -1770,6 +1825,7 @@ function displayQuestion() {
             });
 
             optionWrapper.classList.add('selected');
+            renderQuestionPalette();
 
             // Show prompt if this is the last question
             if (currentQuestion === currentQuiz.length - 1) {
@@ -1792,6 +1848,56 @@ function displayQuestion() {
     if (prevBtn) {
         prevBtn.disabled = currentQuestion === 0;
     }
+    renderQuestionPalette();
+}
+
+function renderQuestionPalette() {
+    if (!questionPalette) return;
+    const fragment = document.createDocumentFragment();
+    let answeredCount = 0;
+
+    currentQuiz.forEach((question, index) => {
+        const isCurrent = index === currentQuestion;
+        const isAnswered = selectedAnswers[index] !== null && selectedAnswers[index] !== undefined;
+        if (isAnswered) answeredCount++;
+
+        const state = isCurrent ? 'current' : isAnswered ? 'answered' : visitedQuestions[index] ? 'visited' : 'unanswered';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `palette-question ${state}`;
+        button.dataset.questionIndex = index;
+        button.textContent = String(index + 1);
+        button.setAttribute('aria-label', `السؤال ${index + 1}: ${isAnswered ? 'تمت الإجابة' : visitedQuestions[index] ? 'تمت الزيارة دون إجابة' : 'لم تتم زيارته'}`);
+        button.setAttribute('aria-pressed', String(isCurrent));
+        if (isCurrent) button.setAttribute('aria-current', 'step');
+        fragment.appendChild(button);
+    });
+
+    questionPalette.replaceChildren(fragment);
+    if (paletteProgress) paletteProgress.textContent = `تمت الإجابة عن ${answeredCount} من ${currentQuiz.length}`;
+}
+
+function updateDurationPreview() {
+    if (!durationPreview) return;
+    const count = Number.parseInt(numQuestionsInput.value, 10);
+    if (!Number.isInteger(count) || count < 1) {
+        durationPreview.textContent = 'أدخل عدداً صحيحاً من الأسئلة.';
+        return;
+    }
+    const availableQuestions = selectedTopic && quizData[selectedTopic] && quizData[selectedTopic][selectedDifficulty]
+        ? quizData[selectedTopic][selectedDifficulty].length
+        : 40;
+    const effectiveCount = Math.min(count, availableQuestions);
+    const duration = effectiveCount * SECONDS_PER_QUESTION;
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    const formatArabic = value => new Intl.NumberFormat('ar').format(value);
+    const durationText = seconds
+        ? `المدة التقديرية: ${formatArabic(minutes)} دقيقة و${formatArabic(seconds)} ثانية.`
+        : `المدة التقديرية: ${formatArabic(minutes)} دقيقة.`;
+    durationPreview.textContent = count > availableQuestions
+        ? `المتاح لهذه المادة ${formatArabic(availableQuestions)} سؤالاً كحد أقصى. ${durationText}`
+        : durationText;
 }
 
 function showTemporaryQuizMessage(message) {
@@ -1814,15 +1920,7 @@ function nextQuestion() {
 
 async function finishQuiz() {
 
-    if (!examStarted && examSubmitted) {
-        console.log('[FINISH-QUIZ] Already finalized');
-        return;
-    }
-    // Prevent multiple submissions
-    if (examSubmitted) {
-        console.log('[FINISH-QUIZ] Already submitted, skipping duplicate');
-        return;
-    }
+    if (!examStarted || examSubmitted || !currentQuiz.length) return;
     examSubmitted = true;
     antiCheatSystem.disable();
 
@@ -1830,6 +1928,7 @@ async function finishQuiz() {
 
     // Stop timer
     clearInterval(timerInterval);
+    timerInterval = null;
     examStarted = false;
 
     // Calculate score
@@ -1847,10 +1946,19 @@ async function finishQuiz() {
     // Save to Firebase and wait for completion
     try {
         console.log('[FINISH-QUIZ] Saving to Firebase...');
-        await saveScoreToServer(studentName, score, classLevel, currentQuiz.length);
+        const savedResult = await saveScoreToServer(studentName, score, classLevel, currentQuiz.length);
+        const saveStatus = document.getElementById('saveStatus');
+        if (savedResult && savedResult.source) {
+            saveStatus.textContent = savedResult.storedLocally
+                ? 'تعذر الحفظ على الخادم؛ تم حفظ النتيجة على هذا الجهاز فقط.'
+                : 'تعذر حفظ النتيجة. يرجى إبلاغ مسؤول الاختبار.';
+        } else {
+            saveStatus.textContent = 'تم حفظ النتيجة.';
+        }
         console.log('[FINISH-QUIZ] Firebase save completed successfully');
     } catch (error) {
         console.error('[FINISH-QUIZ] Firebase save failed, showing results anyway:', error);
+        document.getElementById('saveStatus').textContent = 'تعذر حفظ النتيجة. يرجى إبلاغ مسؤول الاختبار.';
         // Continue to results screen even if Firebase fails
     }
 
@@ -1865,6 +1973,7 @@ async function finishQuiz() {
 }
 
 function calculateScore() {
+    if (!currentQuiz.length || selectedAnswers.length !== currentQuiz.length) return;
     score = 0;
     selectedAnswers.forEach((answer, index) => {
         if (answer === currentQuiz[index].ans) {
@@ -1872,7 +1981,8 @@ function calculateScore() {
         }
     });
 
-    const scaledScore = Math.round((score / currentQuiz.length) * 60);
+    const answeredCount = selectedAnswers.filter(answer => answer !== null && answer !== undefined).length;
+    const unansweredCount = currentQuiz.length - answeredCount;
     const percentage = Math.round((score / currentQuiz.length) * 100);
     const timeTaken = Math.floor((Date.now() - startTime) / 1000);
     const minutes = Math.floor(timeTaken / 60);
@@ -1899,10 +2009,12 @@ function calculateScore() {
         message = `❌ Fail.<br>Grade: F`;
         passed = false;
     }
-    document.getElementById('finalScore').textContent = `${scaledScore}/60`;
+    document.getElementById('finalScore').textContent = `${score}/${currentQuiz.length}`;
     document.getElementById('scoreMessage').innerHTML = message;
     document.getElementById('correctCount').textContent = score;
-    document.getElementById('wrongCount').textContent = currentQuiz.length - score;
+    document.getElementById('wrongCount').textContent = answeredCount - score;
+    document.getElementById('answeredCount').textContent = answeredCount;
+    document.getElementById('unansweredCount').textContent = unansweredCount;
     document.getElementById('percentage').textContent = `${percentage}%`;
     document.getElementById('timeTaken').textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     document.getElementById('topicResult').textContent = topicNames[selectedTopic] || selectedTopic.charAt(0).toUpperCase() + selectedTopic.slice(1);
@@ -1914,6 +2026,8 @@ function calculateScore() {
     };
     document.getElementById('studentNameResult').textContent = studentName || 'N/A';
     document.getElementById('classResult').textContent = classMapping[selectedDifficulty] || 'JSS 2';
+    document.getElementById('toggleReviewBtn').disabled = false;
+    document.getElementById('saveStatus').textContent = 'جارٍ حفظ النتيجة...';
 
     // Play sound and show effect
     setTimeout(() => {
@@ -1941,60 +2055,44 @@ function calculateScore() {
 
 // === ADD THIS ===
 function saveScoreToServer(name, score, classLevel, totalQuestions) {
-    return new Promise((resolve, reject) => {
-        // Check Firebase availability
-        if (!window.db || !window.addDoc || !window.collection) {
-            console.warn('[FIREBASE] Firebase not ready, storing locally');
-            // Store locally as fallback
-            const localScore = {
-                name: name,
-                class: classLevel,
-                subject: selectedTopic,
-                score: score,
-                scoreOver60: Math.round((score / totalQuestions) * 60),
-                percentage: Math.round((score / totalQuestions) * 100),
-                totalQuestions: totalQuestions,
-                timestamp: new Date().toISOString(),
-                source: 'local'
-            };
-            localStorage.setItem(`quiz_score_${Date.now()}`, JSON.stringify(localScore));
-            console.log('[FIREBASE] Score stored locally:', localScore);
-            resolve(localScore);
-            return;
+    const answeredCount = selectedAnswers.filter(answer => answer !== null && answer !== undefined).length;
+    const scoreData = {
+        name,
+        class: classLevel,
+        subject: selectedTopic,
+        score,
+        scoreOver60: Math.round((score / totalQuestions) * 60),
+        percentage: Math.round((score / totalQuestions) * 100),
+        totalQuestions,
+        answeredCount,
+        unansweredCount: totalQuestions - answeredCount,
+        timestamp: new Date()
+    };
+
+    const saveLocally = source => {
+        scoreData.source = source;
+        scoreData.timestamp = scoreData.timestamp.toISOString();
+        scoreData.storedLocally = false;
+        try {
+            localStorage.setItem(`quiz_score_${Date.now()}`, JSON.stringify(scoreData));
+            scoreData.storedLocally = true;
+        } catch (error) {
+            console.warn('[FIREBASE] Local fallback storage unavailable:', error);
         }
+        return scoreData;
+    };
 
-        const scoreOver60 = Math.round((score / totalQuestions) * 60);
-        const percentage = Math.round((score / totalQuestions) * 100);
+    if (!window.db || !window.addDoc || !window.collection) {
+        console.warn('[FIREBASE] Firebase not ready, storing locally');
+        return Promise.resolve(saveLocally('local'));
+    }
 
-        const scoreData = {
-            name: name,
-            class: classLevel,
-            subject: selectedTopic,
-            score: score,
-            scoreOver60: scoreOver60,
-            percentage: percentage,
-            totalQuestions: totalQuestions,
-            timestamp: new Date()
-        };
-
-        console.log('[FIREBASE] Saving score data:', scoreData);
-
-        window.addDoc(collection(db, 'cbt_scores_arabic'), scoreData)
-            .then((docRef) => {
-                console.log('✅ [FIREBASE] Score saved successfully with ID:', docRef.id);
-                resolve(docRef);
-            })
-            .catch((error) => {
-                console.error('❌ [FIREBASE] Error saving score:', error);
-                // Fallback: save locally
-                scoreData.timestamp = scoreData.timestamp.toISOString();
-                scoreData.source = 'local_fallback';
-                localStorage.setItem(`quiz_score_${Date.now()}`, JSON.stringify(scoreData));
-                console.log('[FIREBASE] Fallback: Score stored locally due to Firebase error');
-                // Resolve anyway to continue with results screen
-                resolve(scoreData);
-            });
-    });
+    return Promise.resolve()
+        .then(() => window.addDoc(window.collection(window.db, 'cbt_scores_arabic'), scoreData))
+        .catch(error => {
+            console.error('[FIREBASE] Error saving score:', error);
+            return saveLocally('local_fallback');
+        });
 }
 // View saved scores in Firebase Console → Firestore → cbt_scores
 
@@ -2024,18 +2122,26 @@ function restartQuiz() {
     selectedTopicDisplay.textContent = '';
     selectedDifficulty = 'medium';
     selectedAnswers = [];
+    visitedQuestions = [];
     timeRemaining = 0;
     clearInterval(timerInterval);
+    timerInterval = null;
+    document.getElementById('toggleReviewBtn').disabled = true;
+    document.getElementById('saveStatus').textContent = '';
+    document.getElementById('quizReview').style.display = 'none';
+    document.getElementById('toggleReviewBtn').textContent = 'عرض مراجعة الأسئلة';
 
     // Reset UI
     topicBtns.forEach(btn => btn.classList.remove('selected'));
     difficultyBtns.forEach(btn => btn.classList.remove('selected'));
     difficultyBtns[1].classList.add('selected');
+    difficultyBtns.forEach((btn, index) => btn.setAttribute('aria-pressed', String(index === 1)));
     numQuestionsInput.value = '40';
     document.getElementById('studentName').value = '';
     // === END ADD ===
 
     showScreen('start');
+    updateDurationPreview();
     antiCheatSystem.cleanup();
 
 }

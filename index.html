@@ -39,17 +39,18 @@
 
 <body class="notranslate">
 
-    <div id="guidelineModal" class="modal-overlay">
+    <div id="guidelineModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="guidelineTitle">
         <div class="modal-box">
-            <h2>📘 إرشادات الاختبار</h2>
+            <h2 id="guidelineTitle">إرشادات الاختبار</h2>
             <ul>
                 <li>اختر المادة والمرحلة قبل بدء الاختبار.</li>
-                <li>لديك 40 ثانية لكل سؤال.</li>
+                <li>لديك 40 ثانية لكل سؤال، ويظهر الوقت الإجمالي قبل البدء.</li>
                 <li>يبدأ العد التنازلي فور النقر على زر "ابدأ".</li>
                 <li>يتم تغيير ترتيب الأسئلة والاختيارات في كل مرة.</li>
                 <li>يمكنك الرجوع إلى الأسئلة السابقة.</li>
                 <li>إذا انتهى الوقت يتم تسليم الاختبار تلقائياً.</li>
-                <li>سيتم عرض النتيجة وتقييم الأداء في النهاية.</li>
+                <li>لا تغادر صفحة الاختبار؛ قد يؤدي تكرار مغادرتها إلى التسليم التلقائي.</li>
+                <li>سيتم عرض النتيجة وتقييم الأداء بعد التسليم.</li>
             </ul>
             <button id="confirmGuidelines" class="btn">فهمت</button>
         </div>
@@ -62,7 +63,7 @@
 
             <div class="form-group">
                 <label for="studentName">اسم الطالب (مطلوب):</label>
-                <input type="text" id="studentName" placeholder="أدخل اسمك الكامل" required>
+                <input type="text" id="studentName" placeholder="أدخل اسمك الكامل" autocomplete="name" required>
             </div>
 
             <div class="form-group">
@@ -74,23 +75,23 @@
                     <button class="topic-btn" data-topic="faraid" disabled>النحو للأول الثانوي</button>
                     <button class="topic-btn" data-topic="arood" disabled>الصرف للثالث الإعدادي</button>
                     <button class="topic-btn" data-topic="fiqh" disabled>العروض للأول الثانوي</button>
-                    <button class="topic-btn" data-topic="tawhid">الحديث للأول الثانوي</button>
-                    <button class="topic-btn" data-topic="seerah">الفقه للثالث الإعدادي</button>
+                    <button class="topic-btn" data-topic="tawhid" disabled>الحديث للأول الثانوي</button>
+                    <button class="topic-btn" data-topic="seerah" disabled>الفقه للثالث الإعدادي</button>
                     <button class="topic-btn" data-topic="mustalah_alhadith"disabled>العربية </button>
-                    <button class="topic-btn" data-topic="hadith" >المصطلح ١</button>
+                    <button class="topic-btn" data-topic="hadith" disabled>المصطلح ١</button>
                     <button class="topic-btn" data-topic="mustalah_3" disabled>المصطلح ٣</button>
                     <button class="topic-btn" data-topic="usul_fiqh_3" disabled>أصول الفقه ٣</button>
                     <button class="topic-btn" data-topic="arabic_1" disabled>العربية 1</button>
                     <button class="topic-btn" data-topic="mustalah_2" disabled>المصطلح ٢</button>
                     <button class="topic-btn" data-topic="nahw_2" disabled>النحو ٢</button>
-                    <button class="topic-btn" data-topic="aqeedah_2">العقيدة ٢</button>
+                    <button class="topic-btn" data-topic="aqeedah_2" disabled>العقيدة ٢</button>
                     <button class="topic-btn" data-topic="usul_fiqh_2" disabled>أصول الفقه ٢</button>
                     <button class="topic-btn" data-topic="usul_fiqh_1" disabled>أصول الفقه ١</button>
                     <button class="topic-btn" data-topic="balagha_2" disabled>البلاغة ٢</button>
                     <button class="topic-btn" data-topic="faraid_2" disabled>الفرائض ٢</button>
                     <button class="topic-btn" data-topic="balagha_1" disabled>البلاغة ١</button>
                     <button class="topic-btn" data-topic="faraid_1"disabled>الفرائض ١</button>
-                    <button class="topic-btn" data-topic="balagha_3">البلاغة ٣</button>
+                    <button class="topic-btn" data-topic="balagha_3" disabled>البلاغة ٣</button>
                     <button class="topic-btn" data-topic="faraid_3" disabled>الفرائض ٣</button>
                     <button class="topic-btn" data-topic="arood_3" disabled>العروض ٣</button>
                 </div>
@@ -99,6 +100,7 @@
             <div class="form-group">
                 <label for="numQuestions">عدد الأسئلة (5-40):</label>
                 <input type="number" id="numQuestions" min="5" max="40" value="40">
+                <p id="durationPreview" class="field-hint" aria-live="polite">المدة: ٢٦ دقيقة و٤٠ ثانية عند اختيار ٤٠ سؤالاً.</p>
             </div>
 
             <div class="form-group">
@@ -116,7 +118,7 @@
         <!-- Quiz Screen -->
         <div id="quizScreen" class="screen">
             <div class="quiz-header">
-                <div class="progress">
+                <div class="progress" aria-label="معلومات الاختبار">
                     <span class="progress-item progress-question">السؤال <span id="currentQuestion">1</span> من <span id="totalQuestions">10</span></span>
                     <span class="progress-item progress-class" id="selectedClassDisplay">JSS 2</span>
                     <span class="progress-item progress-student" id="studentNameDisplay"></span>
@@ -127,12 +129,12 @@
                         <div class="progress-bar-fill" id="progressBarFill"></div>
                     </div>
                 </div>
-                <div class="timer" id="timer">00:00</div>
+                <div class="timer-wrap"><span>الوقت المتبقي</span><time class="timer" id="timer" role="timer" aria-live="off">00:00</time></div>
             </div>
 
             <div class="question-container">
-                <div class="question-text" id="questionText"></div>
-                <div class="options" id="options"></div>
+                <h2 class="question-text" id="questionText" tabindex="-1"></h2>
+                <div class="options" id="options" role="radiogroup" aria-labelledby="questionText"></div>
             </div>
 
             <div class="question-navigation">
@@ -140,12 +142,26 @@
                 <input type="number" id="questionSlider" min="1" step="1" value="1">
             </div>
 
+            <nav class="question-palette" aria-label="التنقل بين الأسئلة">
+                <div class="palette-heading">
+                    <h2>خريطة الأسئلة</h2>
+                    <span id="paletteProgress" aria-live="polite"></span>
+                </div>
+                <div class="palette-legend" aria-hidden="true">
+                    <span><i class="legend-current"></i>الحالي</span>
+                    <span><i class="legend-answered"></i>تمت الإجابة</span>
+                    <span><i class="legend-visited"></i>تمت الزيارة</span>
+                    <span><i class="legend-unanswered"></i>لم تتم الزيارة</span>
+                </div>
+                <div id="questionPalette" class="palette-grid"></div>
+            </nav>
+
             <!-- Navigation Buttons -->
             <div class="nav-buttons">
                 <button id="prevBtn" class="btn btn-prev">السؤال السابق</button>
                 <button id="nextBtn" class="btn">السؤال التالي</button>
             </div>
-            <div id="quizMessage" class="quiz-message"></div>
+            <div id="quizMessage" class="quiz-message" role="status" aria-live="polite"></div>
 
             <button class="btn btn-secondary submit-btn" id="quitBtn">تسليم الاختبار</button>
         </div>
@@ -182,6 +198,16 @@
                 </div>
 
                 <div class="result-item">
+                    <span class="result-label">الأسئلة المجاب عنها:</span>
+                    <span class="result-value" id="answeredCount">0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">الأسئلة غير المجاب عنها:</span>
+                    <span class="result-value" id="unansweredCount">0</span>
+                </div>
+
+                <div class="result-item">
                     <span class="result-label">الإجابات الخاطئة:</span>
                     <span class="result-value" id="wrongCount">0</span>
                 </div>
@@ -198,6 +224,8 @@
             </div>
 
             <button class="btn" id="restartBtn">إعادة الاختبار</button>
+
+            <p id="saveStatus" class="save-status" role="status" aria-live="polite"></p>
 
             <button id="toggleReviewBtn" class="btn" style="margin:10px 0;" disabled>
                 ⬇ عرض مراجعة الأسئلة ⬇
@@ -231,12 +259,17 @@
             measurementId: "G-FYBM55P9JD"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        window.db = db;
-
-        window.addDoc = addDoc;
-        window.collection = collection;
+        try {
+            const app = initializeApp(firebaseConfig);
+            window.db = getFirestore(app);
+            window.addDoc = addDoc;
+            window.collection = collection;
+        } catch (error) {
+            window.db = null;
+            window.addDoc = null;
+            window.collection = null;
+            console.error('Firebase initialization failed; local score fallback will be used.', error);
+        }
 
 
     </script>
