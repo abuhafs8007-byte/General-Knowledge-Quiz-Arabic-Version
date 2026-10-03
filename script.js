@@ -1655,7 +1655,7 @@ let selectedAnswers = [];
 let timeRemaining = 0;
 let timerInterval = null;
 let startTime = 0;
-const SECONDS_PER_QUESTION = 40;
+const SECONDS_PER_QUESTION = 60;
 let visitedQuestions = [];
 
 let studentName = '';
