@@ -2381,7 +2381,6 @@ function calculateScore() {
     };
     document.getElementById('studentNameResult').textContent = studentName || 'N/A';
     document.getElementById('classResult').textContent = classMapping[selectedDifficulty] || 'JSS 2';
-    document.getElementById('toggleReviewBtn').disabled = false;
     document.getElementById('saveStatus').textContent = 'جارٍ حفظ النتيجة...';
 
     // Play sound and show effect
