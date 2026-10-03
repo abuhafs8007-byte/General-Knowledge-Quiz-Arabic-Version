@@ -203,8 +203,6 @@ const quizData = {
 
             { q: "مَا اسْمُ الْفَاعِلِ مِنْ «قَاتَلَ»؟", opts: ["قَاتِلٌ", "مُقَاتِلٌ", "مَقْتُولٌ", "قَتِيلٌ"], ans: 1 },
 
-            { q: "مَا اسْمُ الْمَفْعُولِ مِنْ «قَاتَلَ»؟", opts: ["قَاتِلٌ", "مُقَاتِلٌ", "مُقَاتَلٌ", "قَتِيلٌ"], ans: 2 },
-
             { q: "مَا مُضَارِعُ «اسْتَخْرَجَ»؟", opts: ["يَسْتَخْرِجُ", "يُسْتَخْرَجُ", "يَخْرُجُ", "يَسْتَخْرُجُ"], ans: 0 },
 
         ],
@@ -1628,7 +1626,7 @@ let selectedAnswers = [];
 let timeRemaining = 0;
 let timerInterval = null;
 let startTime = 0;
-const SECONDS_PER_QUESTION = 60;
+const SECONDS_PER_QUESTION = 40;
 let visitedQuestions = [];
 
 let studentName = '';
