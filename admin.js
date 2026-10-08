@@ -13,8 +13,116 @@ let questionSearch = '';
 let questionSubjectFilter = '';
 let resultFilters = { search: '', student: '', className: '', subject: '', status: '' };
 let adminStorageError = false;
+let adminImportState = null;
 
 const adminSections = ['Dashboard', 'Students', 'Questions', 'Subjects / Exams', 'Attempts', 'Results', 'Settings'];
+const adminClassOptions = ['JSS 1', 'JSS 2', 'JSS 3'];
+
+function normalizeAdminText(value) {
+    return String(value ?? '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeAdminClass(className) {
+    const canonical = normalizeAdminText(className).replace(/\s+/g, ' ');
+    const upper = canonical.toUpperCase();
+    if (upper === 'JSS1' || upper === 'JSS 1') return 'JSS 1';
+    if (upper === 'JSS2' || upper === 'JSS 2') return 'JSS 2';
+    if (upper === 'JSS3' || upper === 'JSS 3') return 'JSS 3';
+    return canonical;
+}
+
+function normalizeAdminSubject(value) {
+    const raw = normalizeAdminText(value).toLowerCase();
+    return raw.replace(/[\u0640\u0610-\u064A\u0660-\u0669]/g, character => character);
+}
+
+function parseAdminCsv(text) {
+    const rows = [];
+    let current = '';
+    let currentRow = [];
+    let inQuotes = false;
+
+    for (let index = 0; index < text.length; index++) {
+        const character = text[index];
+        const next = text[index + 1];
+
+        if (character === '"') {
+            if (inQuotes && next === '"') {
+                current += '"';
+                index += 1;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+
+        if (character === ',' && !inQuotes) {
+            currentRow.push(current);
+            current = '';
+            continue;
+        }
+
+        if ((character === '\n' || character === '\r') && !inQuotes) {
+            if (character === '\r' && next === '\n') {
+                index += 1;
+            }
+            currentRow.push(current);
+            if (currentRow.some(value => String(value).trim() !== '')) {
+                rows.push(currentRow);
+            }
+            currentRow = [];
+            current = '';
+            continue;
+        }
+
+        current += character;
+    }
+
+    if (current || currentRow.length) {
+        currentRow.push(current);
+        if (currentRow.some(value => String(value).trim() !== '')) {
+            rows.push(currentRow);
+        }
+    }
+
+    return rows;
+}
+
+function downloadCsvFile(filename, rows) {
+    const csvOutput = rows.map(row => row.map(cell => {
+        const value = String(cell ?? '');
+        if (/[",\n\r]/.test(value)) {
+            return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+    }).join(',')).join('\n');
+
+    const blob = new Blob([csvOutput], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
+function generateQuestionCsvTemplate() {
+    const templateRows = [
+        ['Question', 'Option A', 'Option B', 'Option C', 'Option D', 'Correct Answer', 'Subject', 'Class'],
+        ['ما هي عاصمة نيجيريا؟', 'لاغوس', 'أبوجا', 'كانو', 'إبادان', 'B', 'الجغرافيا', 'JSS 1']
+    ];
+    downloadCsvFile('question-template.csv', templateRows);
+}
+
+function generateStudentCsvTemplate() {
+    const templateRows = [
+        ['Student ID', 'Student Name', 'Class'],
+        ['DA001', 'Ahmad Ishola', 'JSS 1']
+    ];
+    downloadCsvFile('student-template.csv', templateRows);
+}
 
 function escapeAdminText(value) {
     return String(value ?? '').replace(/[&<>"']/g, character => ({
@@ -98,6 +206,7 @@ function adminShell(content) {
     `).join('');
     adminRoot.innerHTML = `
         <div class="admin-layout">
+            <div class="admin-sidebar-backdrop" data-action="close-sidebar"></div>
             <aside class="admin-sidebar">
                 <div class="admin-brand"><span class="admin-brand-mark">CBT</span><div>
                     <strong>${escapeAdminText(window.cbtApp.settings.schoolName)}</strong>
@@ -108,8 +217,13 @@ function adminShell(content) {
             </aside>
             <div class="admin-main">
                 <header class="admin-topbar">
-                    <div><span class="admin-eyebrow">School examination management</span>
-                        <h1>${escapeAdminText(adminSection)}</h1></div>
+                    <div class="admin-topbar-left">
+                        <button type="button" class="admin-mobile-menu-toggle" data-action="toggle-sidebar" aria-label="Toggle navigation">
+                            <span></span><span></span><span></span>
+                        </button>
+                        <div><span class="admin-eyebrow">School examination management</span>
+                            <h1>${escapeAdminText(adminSection)}</h1></div>
+                    </div>
                     <button type="button" class="admin-mobile-logout" data-action="logout">Log out</button>
                 </header>
                 <p class="admin-notice ${adminStorageError ? 'error' : ''}" role="status" ${adminStorageError ? '' : 'hidden'}>${adminStorageError ? 'Could not save changes. Check available browser storage and try again.' : ''}</p>
@@ -151,8 +265,13 @@ function renderStudents() {
         return text.includes(studentSearch.toLowerCase());
     });
     return `<div class="admin-section-heading"><div><h2>Students</h2><p>Add and maintain local student records.</p></div>
-        <button class="admin-primary-button" type="button" data-action="new-student">Add Student</button></div>
+        <div class="admin-section-actions">
+            <button class="admin-light-button" type="button" data-action="download-student-template">Download Student Template</button>
+            <button class="admin-light-button" type="button" data-action="import-students">Import Students</button>
+            <button class="admin-primary-button" type="button" data-action="new-student">Add Student</button>
+        </div></div>
         <div class="admin-toolbar"><input data-search="students" value="${escapeAdminText(studentSearch)}" placeholder="Search name, student ID, or class"></div>
+        ${adminImportState && adminImportState.mode === 'students' ? createImportMarkup('students', adminImportState.preview) : ''}
         <form data-form="student" class="admin-form admin-edit-form" hidden>
             <input type="hidden" name="originalId">
             <label>Full name<input name="name" required></label>
@@ -178,6 +297,231 @@ function subjectSelectOptions(selected = '') {
     ).join('');
 }
 
+function questionDifficultyFromClass(classValue) {
+    const normalized = normalizeAdminClass(classValue);
+    if (normalized === 'JSS 1') return 'easy';
+    if (normalized === 'JSS 2') return 'medium';
+    if (normalized === 'JSS 3') return 'hard';
+    return '';
+}
+
+function questionClassLabelFromDifficulty(difficulty) {
+    return { easy: 'JSS 1', medium: 'JSS 2', hard: 'JSS 3' }[difficulty] || '';
+}
+
+function getSubjectTimerMap(subject) {
+    const timers = subject && subject.timers && typeof subject.timers === 'object' ? subject.timers : {};
+    return Object.entries(timers).reduce((map, [className, duration]) => {
+        const normalized = normalizeAdminClass(className);
+        if (normalized && Number.isFinite(Number(duration))) {
+            map[normalized] = Number(duration);
+        }
+        return map;
+    }, {});
+}
+
+function readSubjectTimersFromForm(values) {
+    const timers = {};
+    adminClassOptions.forEach((className, index) => {
+        const value = Number(values.get(`timer_${index}`));
+        if (Number.isInteger(value) && value >= 1 && value <= 300) {
+            timers[className] = value;
+        }
+    });
+    const classTimer = values.get('className') && Number(values.get('durationMinutes'));
+    if (adminClassOptions.includes(normalizeAdminClass(values.get('className'))) && Number.isInteger(classTimer) && classTimer >= 1 && classTimer <= 300) {
+        timers[normalizeAdminClass(values.get('className'))] = classTimer;
+    }
+    return timers;
+}
+
+function parseQuestionAnswer(value) {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    if (!normalized) return { valid: false, index: null, message: 'Correct Answer is empty.' };
+    const directMap = { A: 0, B: 1, C: 2, D: 3, 0: 0, 1: 1, 2: 2, 3: 3 };
+    if (directMap[normalized] !== undefined) {
+        return { valid: true, index: directMap[normalized] };
+    }
+    return { valid: false, index: null, message: 'Correct Answer is invalid. Expected A, B, C, or D.' };
+}
+
+function findMatchingSubject(label) {
+    const target = normalizeAdminText(label).toLowerCase();
+    if (!target) return null;
+    return window.cbtApp.subjects.find(subject => {
+        const subjectText = normalizeAdminText(subject.name).toLowerCase();
+        const subjectIdText = normalizeAdminText(subject.id).toLowerCase();
+        return subjectText === target || subjectIdText === target;
+    }) || null;
+}
+
+function buildQuestionImportPreview(csvText) {
+    const rows = parseAdminCsv(csvText);
+    if (!rows.length) {
+        return { valid: false, errors: ['The CSV file is empty.'], rows: [] };
+    }
+
+    const headers = rows[0].map(cell => normalizeAdminText(cell).toLowerCase());
+    const requiredHeaders = ['question', 'option a', 'option b', 'option c', 'option d', 'correct answer', 'subject', 'class'];
+    if (headers.length < requiredHeaders.length || requiredHeaders.some((expected, index) => headers[index] !== expected)) {
+        return { valid: false, errors: ['CSV headers do not match the required format. Use: Question,Option A,Option B,Option C,Option D,Correct Answer,Subject,Class.'], rows: [] };
+    }
+
+    const dataRows = rows.slice(1).map((values, index) => {
+        const rowNumber = index + 2;
+        const questionText = normalizeAdminText(values[0]);
+        const options = [1, 2, 3, 4].map((offset) => normalizeAdminText(values[offset]));
+        const answerValue = parseQuestionAnswer(values[5]);
+        const subjectLabel = normalizeAdminText(values[6]);
+        const classValue = normalizeAdminClass(values[7]);
+        const subject = findMatchingSubject(subjectLabel);
+        const difficulty = questionDifficultyFromClass(classValue);
+        const errors = [];
+
+        if (!questionText) errors.push('Question is empty.');
+        options.forEach((option, optionIndex) => {
+            if (!option) errors.push(`Option ${String.fromCharCode(65 + optionIndex)} is empty.`);
+        });
+        if (!answerValue.valid) errors.push(answerValue.message);
+        if (!subject) errors.push('Subject does not exist.');
+        if (!classValue || !difficulty) errors.push('Class is invalid. Expected JSS 1, JSS 2, or JSS 3.');
+
+        const duplicateQuestion = allQuestions().find(item => {
+            const isSameQuestion = item.question.q.trim() === questionText;
+            const isSameSubject = item.subjectId === (subject && subject.id);
+            const isSameClass = item.difficulty === difficulty;
+            return isSameQuestion && isSameSubject && isSameClass;
+        });
+        if (duplicateQuestion) errors.push('Duplicate question already exists.');
+
+        return {
+            rowNumber,
+            questionText,
+            options,
+            answerIndex: answerValue.valid ? answerValue.index : null,
+            subjectName: subjectLabel,
+            subjectId: subject ? subject.id : '',
+            className: classValue,
+            difficulty,
+            syntax: questionText && options.every(Boolean) && answerValue.valid && subject && difficulty,
+            errors,
+            duplicate: Boolean(duplicateQuestion)
+        };
+    });
+
+    const invalidRows = dataRows.filter(row => row.errors.length);
+    return {
+        valid: !invalidRows.length,
+        errors: invalidRows.map(row => `Row ${row.rowNumber} — ${row.errors.join(' ')}`),
+        rows: dataRows
+    };
+}
+
+function buildStudentImportPreview(csvText) {
+    const rows = parseAdminCsv(csvText);
+    if (!rows.length) {
+        return { valid: false, errors: ['The CSV file is empty.'], rows: [] };
+    }
+
+    const headers = rows[0].map(cell => normalizeAdminText(cell).toLowerCase());
+    const requiredHeaders = ['student id', 'student name', 'class'];
+    if (headers.length < requiredHeaders.length || requiredHeaders.some((expected, index) => headers[index] !== expected)) {
+        return { valid: false, errors: ['CSV headers do not match the required format. Use: Student ID,Student Name,Class.'], rows: [] };
+    }
+
+    const studentIdsInFile = new Set();
+    const dataRows = rows.slice(1).map((values, index) => {
+        const rowNumber = index + 2;
+        const studentId = normalizeAdminText(values[0]);
+        const name = normalizeAdminText(values[1]);
+        const className = normalizeAdminClass(values[2]);
+        const errors = [];
+
+        if (!studentId) errors.push('Student ID is empty.');
+        if (!name) errors.push('Student Name is empty.');
+        if (!adminClassOptions.includes(className)) errors.push('Class is invalid. Expected JSS 1, JSS 2, or JSS 3.');
+
+        if (studentId) {
+            if (studentIdsInFile.has(studentId.toUpperCase())) {
+                errors.push('Duplicate Student ID found within the uploaded file.');
+            }
+            studentIdsInFile.add(studentId.toUpperCase());
+        }
+
+        const existingStudent = window.cbtApp.students.find(student =>
+            normalizeAdminText(student.studentId || student.id).toUpperCase() === studentId.toUpperCase()
+        );
+        if (existingStudent) errors.push('Duplicate Student ID already exists in the current school records.');
+
+        return {
+            rowNumber,
+            studentId,
+            name,
+            className,
+            valid: !errors.length,
+            errors
+        };
+    });
+
+    const invalidRows = dataRows.filter(row => row.errors.length);
+    return {
+        valid: !invalidRows.length,
+        errors: invalidRows.map(row => `Row ${row.rowNumber} — ${row.errors.join(' ')}`),
+        rows: dataRows
+    };
+}
+
+function createImportMarkup(mode, preview) {
+    const rows = preview.rows || [];
+    const errors = preview.errors || [];
+    const tableRows = rows.length
+        ? rows.map(row => {
+            if (mode === 'questions') {
+                return `<tr>
+                    <td>${row.rowNumber}</td>
+                    <td>${escapeAdminText(row.questionText || '--')}</td>
+                    <td>${escapeAdminText(row.options.join(' / ') || '--')}</td>
+                    <td>${escapeAdminText(row.answerIndex !== null ? ['A', 'B', 'C', 'D'][row.answerIndex] : '--')}</td>
+                    <td>${escapeAdminText(row.subjectName || '--')}</td>
+                    <td>${escapeAdminText(row.className || '--')}</td>
+                    <td>${row.errors.length ? '<span class="admin-import-status error">Invalid</span>' : '<span class="admin-import-status ok">Valid</span>'}</td>
+                </tr>`;
+            }
+            return `<tr>
+                <td>${row.rowNumber}</td>
+                <td>${escapeAdminText(row.studentId || '--')}</td>
+                <td>${escapeAdminText(row.name || '--')}</td>
+                <td>${escapeAdminText(row.className || '--')}</td>
+                <td>${row.errors.length ? '<span class="admin-import-status error">Invalid</span>' : '<span class="admin-import-status ok">Valid</span>'}</td>
+            </tr>`;
+        }).join('')
+        : '<tr><td colspan="7" class="admin-empty">No preview data available.</td></tr>';
+
+    const headerText = mode === 'questions' ? ['Row', 'Question', 'Options', 'Correct', 'Subject', 'Class', 'Status'] : ['Row', 'Student ID', 'Name', 'Class', 'Status'];
+    const thMarkup = headerText.map(title => `<th>${escapeAdminText(title)}</th>`).join('');
+
+    const errorMarkup = errors.length
+        ? `<div class="admin-import-errors"><strong>Validation issues found:</strong><ul>${errors.map(error => `<li>${escapeAdminText(error)}</li>`).join('')}</ul></div>`
+        : '<div class="admin-import-ok">All rows passed validation.</div>';
+
+    return `
+        <div class="admin-import-panel">
+            <div class="admin-import-header">
+                <div>
+                    <h3>${mode === 'questions' ? 'CSV Question Preview' : 'CSV Student Preview'}</h3>
+                    <p>${mode === 'questions' ? 'Review each row before adding to the question bank.' : 'Review each row before importing students.'}</p>
+                </div>
+                <div class="admin-import-actions">
+                    <button type="button" class="admin-light-button" data-action="cancel-import">Cancel</button>
+                    <button type="button" class="admin-primary-button" data-action="confirm-import" ${preview.valid ? '' : 'disabled'}>${mode === 'questions' ? 'Confirm Import' : 'Confirm Students'}</button>
+                </div>
+            </div>
+            ${errorMarkup}
+            <div class="admin-table-wrap"><table><thead><tr>${thMarkup}</tr></thead><tbody>${tableRows}</tbody></table></div>
+        </div>
+    `;
+}
+
 function renderQuestions() {
     const matches = allQuestions().filter(item => {
         const subject = window.cbtApp.subjects.find(entry => entry.id === item.subjectId);
@@ -185,11 +529,16 @@ function renderQuestions() {
             `${item.question.q} ${subject ? subject.name : item.subjectId}`.toLowerCase().includes(questionSearch.toLowerCase());
     });
     return `<div class="admin-section-heading"><div><h2>Questions</h2><p>Question format remains { q, opts, ans }.</p></div>
-        <button class="admin-primary-button" type="button" data-action="new-question">Add Question</button></div>
+        <div class="admin-section-actions">
+            <button class="admin-light-button" type="button" data-action="download-question-template">Download Question Template</button>
+            <button class="admin-light-button" type="button" data-action="import-questions">Import Questions</button>
+            <button class="admin-primary-button" type="button" data-action="new-question">Add Question</button>
+        </div></div>
         <div class="admin-toolbar">
             <input data-search="questions" value="${escapeAdminText(questionSearch)}" placeholder="Search question text">
             <select data-filter="question-subject"><option value="">All subjects</option>${subjectSelectOptions(questionSubjectFilter)}</select>
         </div>
+        ${adminImportState && adminImportState.mode === 'questions' ? createImportMarkup('questions', adminImportState.preview) : ''}
         <form data-form="question" class="admin-form admin-edit-form" hidden>
             <input type="hidden" name="originalIndex">
             <label>Question<textarea name="question" rows="3" required></textarea></label>
@@ -223,16 +572,28 @@ function renderSubjects() {
         <form data-form="subject" class="admin-form admin-edit-form" hidden>
             <input type="hidden" name="id">
             <label>Subject name<input name="name" required></label>
-            <label>Exam duration (minutes)<input name="durationMinutes" type="number" min="1" max="300" required></label>
+            <label>Class<select name="className" required>${adminClassOptions.map(option => `<option value="${escapeAdminText(option)}">${escapeAdminText(option)}</option>`).join('')}</select></label>
+            <label>Default exam duration (minutes)<input name="durationMinutes" type="number" min="1" max="300" required></label>
+            <div class="admin-timer-grid">
+                ${adminClassOptions.map((className, index) => `
+                    <label>${escapeAdminText(className)}
+                        <input name="timer_${index}" type="number" min="1" max="300" value="${window.cbtApp.settings.defaultDuration}">
+                    </label>
+                `).join('')}
+            </div>
             <label>Exam instructions<textarea name="instructions" rows="3"></textarea></label>
             <label class="admin-check-label"><input name="isEnabled" type="checkbox"> Exam enabled for students</label>
             <div class="admin-form-actions"><button class="admin-primary-button" type="submit">Save Subject</button>
                 <button class="admin-light-button" type="button" data-action="cancel-form">Cancel</button></div>
         </form>
-        <div class="admin-table-wrap"><table><thead><tr><th>Subject</th><th>Questions</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+        <div class="admin-table-wrap"><table><thead><tr><th>Subject</th><th>Questions</th><th>Class Timers</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${window.cbtApp.subjects.map(subject => {
             const count = allQuestions().filter(item => item.subjectId === subject.id).length;
-            return `<tr><td>${escapeAdminText(subject.name)}</td><td>${count}</td><td>${escapeAdminText(subject.durationMinutes)} min</td>
+            const timers = getSubjectTimerMap(subject);
+            const timerText = Object.keys(timers).length
+                ? Object.entries(timers).map(([className, duration]) => `${escapeAdminText(className)}: ${escapeAdminText(duration)} min`).join(' / ')
+                : `${escapeAdminText(subject.durationMinutes || window.cbtApp.settings.defaultDuration)} min`;
+            return `<tr><td>${escapeAdminText(subject.name)}</td><td>${count}</td><td>${timerText}</td>
                 <td><span class="admin-status ${subject.isEnabled ? 'enabled' : 'disabled'}">${subject.isEnabled ? 'Enabled' : 'Disabled'}</span></td>
                 <td class="admin-actions"><button data-action="subject-toggle" data-id="${escapeAdminText(subject.id)}">${subject.isEnabled ? 'Disable' : 'Enable'}</button>
                     <button data-action="subject-edit" data-id="${escapeAdminText(subject.id)}">Edit</button>
@@ -375,8 +736,21 @@ adminRoot.addEventListener('click', event => {
 
     if (action === 'close-admin') return closeAdmin();
     if (action === 'logout') return closeAdmin(true);
+    if (action === 'toggle-sidebar') {
+        const layout = button.closest('.admin-layout');
+        if (!layout) return;
+        layout.classList.toggle('sidebar-open');
+        return;
+    }
+    if (action === 'close-sidebar') {
+        const layout = button.closest('.admin-layout');
+        if (layout) layout.classList.remove('sidebar-open');
+        return;
+    }
     if (action === 'navigate') {
         adminSection = button.dataset.section;
+        const layout = button.closest('.admin-layout');
+        if (layout) layout.classList.remove('sidebar-open');
         renderAdminPage();
         return;
     }
@@ -384,6 +758,105 @@ adminRoot.addEventListener('click', event => {
         const form = button.closest('form');
         if (form) form.hidden = true;
         return;
+    }
+    if (action === 'cancel-import') {
+        adminImportState = null;
+        renderAdminPage();
+        return;
+    }
+    if (action === 'download-question-template') {
+        generateQuestionCsvTemplate();
+        return;
+    }
+    if (action === 'download-student-template') {
+        generateStudentCsvTemplate();
+        return;
+    }
+    if (action === 'import-questions') {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.csv,text/csv';
+        input.addEventListener('change', event => {
+            const [file] = event.target.files || [];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                const preview = buildQuestionImportPreview(String(reader.result || ''));
+                adminImportState = { mode: 'questions', preview };
+                renderAdminPage();
+            };
+            reader.readAsText(file, 'UTF-8');
+        }, { once: true });
+        input.click();
+        return;
+    }
+    if (action === 'import-students') {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.csv,text/csv';
+        input.addEventListener('change', event => {
+            const [file] = event.target.files || [];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                const preview = buildStudentImportPreview(String(reader.result || ''));
+                adminImportState = { mode: 'students', preview };
+                renderAdminPage();
+            };
+            reader.readAsText(file, 'UTF-8');
+        }, { once: true });
+        input.click();
+        return;
+    }
+    if (action === 'confirm-import') {
+        if (!adminImportState || !adminImportState.preview || !adminImportState.preview.valid) {
+            return showAdminNotice('Fix the validation errors before importing.', true);
+        }
+        if (adminImportState.mode === 'questions') {
+            const validRows = adminImportState.preview.rows.filter(row => !row.errors.length);
+            validRows.forEach(row => {
+                const subject = findMatchingSubject(row.subjectName);
+                if (!subject) return;
+                const difficulty = questionDifficultyFromClass(row.className);
+                if (!difficulty) return;
+                if (!window.cbtApp.questions[subject.id]) window.cbtApp.questions[subject.id] = {};
+                if (!Array.isArray(window.cbtApp.questions[subject.id][difficulty])) {
+                    window.cbtApp.questions[subject.id][difficulty] = [];
+                }
+                window.cbtApp.questions[subject.id][difficulty].push({
+                    q: row.questionText,
+                    opts: row.options,
+                    ans: row.answerIndex
+                });
+            });
+            saveAdminData('questions');
+            window.cbtApp.refreshStudentSubjects();
+            adminImportState = null;
+            renderAdminPage();
+            showAdminNotice('Question records imported successfully.');
+            return;
+        }
+        if (adminImportState.mode === 'students') {
+            const validRows = adminImportState.preview.rows.filter(row => !row.errors.length);
+            validRows.forEach(row => {
+                const existing = window.cbtApp.students.find(student =>
+                    normalizeAdminText(student.studentId || student.id).toUpperCase() === normalizeAdminText(row.studentId).toUpperCase()
+                );
+                if (!existing) {
+                    window.cbtApp.students = window.cbtApp.students.concat({
+                        id: row.studentId,
+                        name: row.name,
+                        studentId: row.studentId,
+                        className: row.className
+                    });
+                }
+            });
+            saveAdminData('students');
+            adminImportState = null;
+            renderAdminPage();
+            showAdminNotice('Student records imported successfully.');
+            return;
+        }
     }
     if (action === 'new-student') {
         const form = adminRoot.querySelector('[data-form="student"]');
@@ -474,6 +947,10 @@ adminRoot.addEventListener('click', event => {
         form.reset();
         form.elements.namedItem('id').value = '';
         form.elements.namedItem('durationMinutes').value = window.cbtApp.settings.defaultDuration;
+        adminClassOptions.forEach((className, index) => {
+            const input = form.elements.namedItem(`timer_${index}`);
+            if (input) input.value = window.cbtApp.settings.defaultDuration;
+        });
         form.hidden = false;
         return;
     }
@@ -481,10 +958,16 @@ adminRoot.addEventListener('click', event => {
         const subject = window.cbtApp.subjects.find(entry => entry.id === id);
         const form = adminRoot.querySelector('[data-form="subject"]');
         if (!subject || !form) return;
+        const timers = getSubjectTimerMap(subject);
         setFormValue(form, 'id', subject.id);
         setFormValue(form, 'name', subject.name);
-        setFormValue(form, 'durationMinutes', subject.durationMinutes);
+        setFormValue(form, 'durationMinutes', subject.durationMinutes || window.cbtApp.settings.defaultDuration);
+        setFormValue(form, 'className', subject.className || normalizeAdminClass(adminClassOptions[0]));
         setFormValue(form, 'instructions', subject.instructions);
+        adminClassOptions.forEach((className, index) => {
+            const input = form.elements.namedItem(`timer_${index}`);
+            if (input) input.value = timers[className] || subject.durationMinutes || window.cbtApp.settings.defaultDuration;
+        });
         form.elements.namedItem('isEnabled').checked = Boolean(subject.isEnabled);
         form.hidden = false;
         form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -686,6 +1169,7 @@ adminRoot.addEventListener('submit', event => {
         const originalId = String(values.get('id') || '');
         const name = String(values.get('name')).trim();
         const durationMinutes = Number(values.get('durationMinutes'));
+        const className = normalizeAdminClass(values.get('className') || '');
         if (!name || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 300) {
             return showAdminNotice('Enter a subject name and a duration from 1 to 300 minutes.', true);
         }
@@ -694,10 +1178,16 @@ adminRoot.addEventListener('submit', event => {
         if (!originalId && window.cbtApp.subjects.some(subject => subject.id === id)) {
             return showAdminNotice('A subject with this name already exists.', true);
         }
+        const timers = readSubjectTimersFromForm(values);
+        if (className && Number.isInteger(durationMinutes) && durationMinutes >= 1 && durationMinutes <= 300) {
+            timers[className] = durationMinutes;
+        }
         const subject = {
             id,
             name,
             durationMinutes,
+            className,
+            timers: Object.keys(timers).length ? timers : undefined,
             isEnabled: values.get('isEnabled') === 'on',
             instructions: String(values.get('instructions')).trim() || window.cbtApp.settings.examInstructions
         };

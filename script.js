@@ -1682,12 +1682,33 @@ if (!Array.isArray(cbtSubjects)) {
             id,
             name: label,
             durationMinutes: defaultCbtSettings.defaultDuration,
+            timers: {
+                'JSS 1': defaultCbtSettings.defaultDuration,
+                'JSS 2': defaultCbtSettings.defaultDuration,
+                'JSS 3': defaultCbtSettings.defaultDuration
+            },
             isEnabled: Boolean(button && !button.disabled),
             instructions: defaultCbtSettings.examInstructions
         };
     });
     saveCbtData('subjects', cbtSubjects);
 }
+
+cbtSubjects = cbtSubjects.map(subject => {
+    const defaultDuration = Number(subject && subject.durationMinutes) || Number(cbtSettings.defaultDuration) || 30;
+    const timers = subject && typeof subject.timers === 'object' ? { ...subject.timers } : {};
+    ['JSS 1', 'JSS 2', 'JSS 3'].forEach(className => {
+        if (!Number.isFinite(Number(timers[className]))) {
+            timers[className] = defaultDuration;
+        }
+    });
+    return {
+        ...subject,
+        durationMinutes: Number(subject && subject.durationMinutes) || defaultDuration,
+        timers,
+        instructions: subject && subject.instructions ? subject.instructions : cbtSettings.examInstructions
+    };
+});
 
 Object.keys(quizData).forEach(id => {
     if (!cbtRemovedSubjects.includes(id) && !cbtSubjects.some(subject => subject.id === id)) {
@@ -1696,6 +1717,11 @@ Object.keys(quizData).forEach(id => {
             id,
             name: topicNames[id] || id,
             durationMinutes: cbtSettings.defaultDuration,
+            timers: {
+                'JSS 1': cbtSettings.defaultDuration,
+                'JSS 2': cbtSettings.defaultDuration,
+                'JSS 3': cbtSettings.defaultDuration
+            },
             isEnabled: Boolean(button && !button.disabled),
             instructions: cbtSettings.examInstructions
         });
@@ -1821,6 +1847,92 @@ saveCbtData('results', cbtResults);
 
 function getSubjectSettings(subjectId) {
     return cbtSubjects.find(subject => subject.id === subjectId);
+}
+
+function normalizeClassName(className) {
+    const raw = String(className || '').trim().replace(/\s+/g, ' ');
+    if (!raw) return '';
+    const upper = raw.toUpperCase();
+    if (upper === 'JSS1' || upper === 'JSS 1') return 'JSS 1';
+    if (upper === 'JSS2' || upper === 'JSS 2') return 'JSS 2';
+    if (upper === 'JSS3' || upper === 'JSS 3') return 'JSS 3';
+    return raw;
+}
+
+function getClassSubjectTimer(subjectId, className) {
+    const subject = getSubjectSettings(subjectId);
+    const normalizedClass = normalizeClassName(className);
+    const timers = subject && typeof subject.timers === 'object' ? subject.timers : {};
+
+    if (normalizedClass && Number.isFinite(Number(timers[normalizedClass]))) {
+        return Number(timers[normalizedClass]);
+    }
+
+    const fallbackKey = Object.keys(timers).find(key => normalizeClassName(key) === normalizedClass);
+    if (normalizedClass && fallbackKey && Number.isFinite(Number(timers[fallbackKey]))) {
+        return Number(timers[fallbackKey]);
+    }
+
+    if (subject && Number.isFinite(Number(subject.durationMinutes))) return Number(subject.durationMinutes);
+    return Number(cbtSettings.defaultDuration) || 30;
+}
+
+function persistInProgressAttempt() {
+    if (!examStarted || examSubmitted || !selectedTopic || !currentAttemptId) return;
+    const totalQuestions = Array.isArray(currentQuiz) ? currentQuiz.length : 0;
+    const answeredCount = selectedAnswers.filter(answer => answer !== null && answer !== undefined).length;
+    const scoreSoFar = currentQuiz.reduce((count, question, index) => {
+        return count + (selectedAnswers[index] === question.ans ? 1 : 0);
+    }, 0);
+
+    const attempt = cbtAttempts.find(entry => entry.id === currentAttemptId) || {
+        id: currentAttemptId,
+        studentKey: currentStudentKey,
+        studentName,
+        studentId: currentStudentId,
+        className: currentStudentClass,
+        subjectId: selectedTopic,
+        subjectName: (getSubjectSettings(selectedTopic) || {}).name || selectedTopic,
+        status: 'In Progress',
+        score: 0,
+        totalQuestions,
+        percentage: 0,
+        timeUsed: '00:00',
+        timestamp: new Date().toISOString()
+    };
+
+    const updatedAttempt = {
+        ...attempt,
+        id: currentAttemptId,
+        studentKey: currentStudentKey,
+        studentName,
+        studentId: currentStudentId,
+        className: currentStudentClass,
+        class: currentStudentClass,
+        subject: (getSubjectSettings(selectedTopic) || {}).name || selectedTopic,
+        subjectId: selectedTopic,
+        subjectName: (getSubjectSettings(selectedTopic) || {}).name || selectedTopic,
+        status: 'In Progress',
+        score: scoreSoFar,
+        percentage: totalQuestions ? Math.round((scoreSoFar / totalQuestions) * 100) : 0,
+        totalQuestions,
+        answeredCount,
+        unansweredCount: totalQuestions - answeredCount,
+        timeUsed: (() => {
+            const timeTaken = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+            const minutes = Math.floor(timeTaken / 60);
+            const seconds = timeTaken % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        })(),
+        timestamp: new Date().toISOString(),
+        dateStarted: attempt.dateStarted || new Date().toISOString(),
+        durationMinutes: getClassSubjectTimer(selectedTopic, currentStudentClass)
+    };
+
+    cbtAttempts = cbtAttempts.filter(entry => entry.id !== currentAttemptId).concat(updatedAttempt);
+    cbtResults = cbtResults.filter(result => result.id !== currentAttemptId).concat(updatedAttempt);
+    saveCbtData('attempts', cbtAttempts);
+    saveCbtData('results', cbtResults);
 }
 
 function refreshCbtBranding() {
@@ -2156,6 +2268,7 @@ const antiCheatSystem = {
     handlers: {
         popstate: null,
         beforeunload: null,
+        pagehide: null,
         visibilitychange: null,
         contextmenu: null,
         keydown: null
@@ -2172,10 +2285,12 @@ const antiCheatSystem = {
     attachGlobalListeners() {
         this.handlers.popstate = (e) => this.handleNavigationAttempt('محاولة التنقل إلى الخلف/الأمام');
         this.handlers.beforeunload = (e) => this.handleBeforeUnload(e);
+        this.handlers.pagehide = () => this.handlePageHide();
         this.handlers.visibilitychange = () => this.handleVisibilityChange();
 
         window.addEventListener('popstate', this.handlers.popstate);
         window.addEventListener('beforeunload', this.handlers.beforeunload);
+        window.addEventListener('pagehide', this.handlers.pagehide);
         document.addEventListener('visibilitychange', this.handlers.visibilitychange);
     },
 
@@ -2199,8 +2314,13 @@ const antiCheatSystem = {
 
         e.preventDefault();
         e.returnValue = '';
-        this.handleNavigationAttempt('تحديث الصفحة / إغلاق');
+        this.finalizeInterruptedAttempt('تحديث الصفحة / إغلاق');
         return '';
+    },
+
+    handlePageHide() {
+        if (!examStarted || examSubmitted || !this.navigationPreventionActive) return;
+        this.finalizeInterruptedAttempt('تم إغلاق الصفحة أو تركها أثناء الامتحان');
     },
 
     handleVisibilityChange() {
@@ -2209,9 +2329,7 @@ const antiCheatSystem = {
         if (document.visibilityState === 'hidden') {
             this.navigationAttemptCount++;
             this.tabSwitchPending = true;
-            if (this.navigationAttemptCount >= this.maxAttemptsBeforeAutoSubmit) {
-                this.autoSubmitExam('تم اكتشاف العديد من محاولات تبديل التبويب');
-            }
+            this.finalizeInterruptedAttempt('تم إخفاء نافذة الامتحان أثناء الاختبار');
             return;
         }
 
@@ -2219,6 +2337,21 @@ const antiCheatSystem = {
             const attemptsLeft = Math.max(0, this.maxAttemptsBeforeAutoSubmit - this.navigationAttemptCount);
             this.showCheatWarningModal('تم تبديل التبويب. الرجاء العودة إلى نافذة الامتحان.', attemptsLeft);
             this.tabSwitchPending = false;
+        }
+    },
+
+    finalizeInterruptedAttempt(reason) {
+        if (!examStarted || examSubmitted) return;
+        if (this.isNavigationLocked) return;
+        this.isNavigationLocked = true;
+        this.navigationPreventionActive = false;
+        persistInProgressAttempt();
+        finishQuiz().catch(() => {
+            showScreen('results');
+        });
+        this.clearActiveWarningModal();
+        if (typeof reason === 'string' && reason) {
+            console.log(`[ANTI-CHEAT] Finalizing interrupted exam: ${reason}`);
         }
     },
 
@@ -2408,6 +2541,11 @@ const antiCheatSystem = {
             this.handlers.beforeunload = null;
         }
 
+        if (this.handlers.pagehide) {
+            window.removeEventListener('pagehide', this.handlers.pagehide);
+            this.handlers.pagehide = null;
+        }
+
         if (this.handlers.visibilitychange) {
             document.removeEventListener('visibilitychange', this.handlers.visibilitychange);
             this.handlers.visibilitychange = null;
@@ -2483,6 +2621,29 @@ function startQuiz() {
         return;
     }
 
+    const interruptedAttempt = cbtAttempts.find(attempt =>
+        attempt.subjectId === selectedTopic &&
+        (normalizeStudentId(attempt.studentId) === normalizeStudentId(currentStudentId) || attempt.studentKey === currentStudentKey) &&
+        attempt.status === 'In Progress'
+    );
+    if (interruptedAttempt) {
+        const nextAttempt = {
+            ...interruptedAttempt,
+            status: 'Completed',
+            percentage: Number(interruptedAttempt.percentage) || 0,
+            score: Number(interruptedAttempt.score) || 0,
+            timeUsed: interruptedAttempt.timeUsed || '00:00',
+            dateCompleted: new Date().toISOString(),
+            timestamp: new Date().toISOString()
+        };
+        cbtAttempts = cbtAttempts.map(attempt => attempt.id === interruptedAttempt.id ? nextAttempt : attempt);
+        cbtResults = cbtResults.filter(result => result.id !== interruptedAttempt.id).concat(nextAttempt);
+        saveCbtData('attempts', cbtAttempts);
+        saveCbtData('results', cbtResults);
+        alert('A previous attempt for this exam was interrupted and has already been finalized. You cannot retake it.');
+        return;
+    }
+
     let numQuestion = Number.parseInt(numQuestionsInput.value, 10);
     if (!Number.isInteger(numQuestion) || numQuestion < 5 || numQuestion > 60) {
         alert('يرجى إدخال عدد بين 5 و 60!');
@@ -2534,7 +2695,8 @@ function startQuiz() {
     visitedQuestions = new Array(currentQuiz.length).fill(false);
     startTime = Date.now();
 
-    timeRemaining = Math.max(1, Number(subjectSettings.durationMinutes) || cbtSettings.defaultDuration) * 60;
+    const subjectTimerMinutes = getClassSubjectTimer(selectedTopic, currentStudentClass);
+    timeRemaining = Math.max(1, Number(subjectTimerMinutes) || cbtSettings.defaultDuration) * 60;
     const previousPendingAttempt = findStudentSubjectAttempt(cbtAttempts, currentStudentId, selectedTopic, 'In Progress');
     currentAttemptId = previousPendingAttempt
         ? previousPendingAttempt.id
@@ -2555,7 +2717,7 @@ function startQuiz() {
         dateStarted: new Date().toISOString(),
         timestamp: new Date().toISOString(),
         timeUsed: '00:00',
-        durationMinutes: Math.max(1, Number(subjectSettings.durationMinutes) || cbtSettings.defaultDuration)
+        durationMinutes: subjectTimerMinutes
     };
     cbtAttempts = cbtAttempts.filter(attempt => attempt.id !== currentAttemptId).concat(pendingAttempt);
     cbtResults = cbtResults.filter(result => result.id !== currentAttemptId).concat(pendingAttempt);
@@ -2649,6 +2811,7 @@ function displayQuestion() {
 
         radio.addEventListener('change', () => {
             selectedAnswers[currentQuestion] = originalIndex;
+            persistInProgressAttempt();
             document.querySelectorAll('.option').forEach(opt => {
                 opt.classList.remove('selected');
             });
@@ -2716,7 +2879,7 @@ function updateDurationPreview() {
     const availableQuestions = selectedTopic && quizData[selectedTopic] && quizData[selectedTopic][selectedDifficulty]
         ? quizData[selectedTopic][selectedDifficulty].length
         : 60;
-    const minutes = Math.max(1, Number((getSubjectSettings(selectedTopic) || {}).durationMinutes) || cbtSettings.defaultDuration);
+    const minutes = Math.max(1, Number(getClassSubjectTimer(selectedTopic, currentStudentClass)) || Number(cbtSettings.defaultDuration) || 30);
     const formatArabic = value => new Intl.NumberFormat('ar').format(value);
     const durationText = `مدة الاختبار: ${formatArabic(minutes)} دقيقة.`;
     durationPreview.textContent = count > availableQuestions
