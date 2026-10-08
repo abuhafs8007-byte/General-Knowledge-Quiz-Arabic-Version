@@ -1612,6 +1612,248 @@ const topicNames = {
     arood_3: 'العروض ٣'
 };
 
+const CBT_STORAGE_KEYS = {
+    students: 'cbt_students',
+    subjects: 'cbt_subjects',
+    questions: 'cbt_questions',
+    attempts: 'cbt_attempts',
+    results: 'cbt_results',
+    settings: 'cbt_settings',
+    legacyMigration: 'cbt_legacy_scores_migrated',
+    removedSubjects: 'cbt_removed_subjects'
+};
+
+const defaultCbtSettings = {
+    schoolName: 'Daarul-Hikam Academy',
+    platformName: 'نظام الامتحان الإلكتروني CBT - منصة الاختبار المدرسي',
+    defaultDuration: 30,
+    numberOfQuestions: 40,
+    passingScore: 50,
+    allowResults: true,
+    examInstructions: 'اقرأ الأسئلة جيداً، واختر إجابة واحدة لكل سؤال.'
+};
+
+function loadCbtData(key, fallback) {
+    try {
+        const savedValue = localStorage.getItem(CBT_STORAGE_KEYS[key]);
+        return savedValue ? JSON.parse(savedValue) : fallback;
+    } catch (error) {
+        console.error(`Unable to load CBT ${key} from local storage.`, error);
+        return fallback;
+    }
+}
+
+function saveCbtData(key, value) {
+    try {
+        localStorage.setItem(CBT_STORAGE_KEYS[key], JSON.stringify(value));
+        return true;
+    } catch (error) {
+        console.error(`Unable to save CBT ${key} to local storage.`, error);
+        return false;
+    }
+}
+
+// ADD NEW STUDENTS HERE
+const sampleStudents = [
+    { id: 'JSS2-001', name: 'Ahmed Ibrahim', className: 'JSS 2', studentId: 'JSS2-001' },
+    { id: 'JSS2-002', name: 'Aisha Yusuf', className: 'JSS 2', studentId: 'JSS2-002' },
+    { id: 'JSS2-003', name: 'Muhammad Abdullahi', className: 'JSS 2', studentId: 'JSS2-003' },
+    { id: 'JSS2-004', name: 'Fatimah Bello', className: 'JSS 2', studentId: 'JSS2-004' }
+];
+
+let cbtStudents = loadCbtData('students', sampleStudents);
+let cbtSubjects = loadCbtData('subjects', null);
+let cbtAttempts = loadCbtData('attempts', []);
+let cbtResults = loadCbtData('results', []);
+let cbtSettings = { ...defaultCbtSettings, ...loadCbtData('settings', {}) };
+let cbtRemovedSubjects = loadCbtData('removedSubjects', []);
+
+if (!Array.isArray(cbtStudents)) cbtStudents = sampleStudents.slice();
+if (!Array.isArray(cbtAttempts)) cbtAttempts = [];
+if (!Array.isArray(cbtResults)) cbtResults = [];
+if (!Array.isArray(cbtRemovedSubjects)) cbtRemovedSubjects = [];
+if (!Array.isArray(cbtSubjects)) {
+    cbtSubjects = Object.keys(quizData).map((id, index) => {
+        const button = document.querySelector(`.topic-btn[data-topic="${id}"]`);
+        const label = button && button.textContent.trim()
+            ? button.textContent.trim()
+            : topicNames[id] || id;
+        return {
+            id,
+            name: label,
+            durationMinutes: defaultCbtSettings.defaultDuration,
+            isEnabled: Boolean(button && !button.disabled),
+            instructions: defaultCbtSettings.examInstructions
+        };
+    });
+    saveCbtData('subjects', cbtSubjects);
+}
+
+Object.keys(quizData).forEach(id => {
+    if (!cbtRemovedSubjects.includes(id) && !cbtSubjects.some(subject => subject.id === id)) {
+        const button = document.querySelector(`.topic-btn[data-topic="${id}"]`);
+        cbtSubjects.push({
+            id,
+            name: topicNames[id] || id,
+            durationMinutes: cbtSettings.defaultDuration,
+            isEnabled: Boolean(button && !button.disabled),
+            instructions: cbtSettings.examInstructions
+        });
+    }
+});
+
+const savedQuestions = loadCbtData('questions', null);
+if (savedQuestions && typeof savedQuestions === 'object') {
+    Object.keys(savedQuestions).forEach(subjectId => {
+        if (!quizData[subjectId]) quizData[subjectId] = {};
+        Object.keys(savedQuestions[subjectId] || {}).forEach(level => {
+            if (Array.isArray(savedQuestions[subjectId][level])) {
+                quizData[subjectId][level] = savedQuestions[subjectId][level];
+            }
+        });
+    });
+}
+
+saveCbtData('students', cbtStudents);
+saveCbtData('subjects', cbtSubjects);
+saveCbtData('settings', cbtSettings);
+
+function normalizeStudentId(studentId) {
+    return String(studentId || '').trim().toUpperCase();
+}
+
+function findRegisteredStudent(studentId) {
+    const normalizedId = normalizeStudentId(studentId);
+    if (!normalizedId) return null;
+    return cbtStudents.find(student =>
+        normalizeStudentId(student.studentId || student.id) === normalizedId
+    ) || null;
+}
+
+function getStudentKey(studentId) {
+    return `id:${normalizeStudentId(studentId).toLowerCase()}`;
+}
+
+function findStudentSubjectAttempt(attempts, studentId, subjectId, status) {
+    const studentKey = getStudentKey(studentId);
+    return attempts.find(attempt =>
+        (normalizeStudentId(attempt.studentId) === normalizeStudentId(studentId) ||
+            attempt.studentKey === studentKey) &&
+        attempt.subjectId === subjectId &&
+        (!status || attempt.status === status)
+    );
+}
+
+function getDifficultyForClass(className) {
+    const normalizedClass = String(className || '').replace(/\s+/g, '').toUpperCase();
+    return { JSS1: 'easy', JSS2: 'medium', JSS3: 'hard' }[normalizedClass] || '';
+}
+
+function migrateLegacyScores() {
+    try {
+        if (localStorage.getItem(CBT_STORAGE_KEYS.legacyMigration) === 'true') return;
+        const oldScoreKeys = [];
+        for (let index = 0; index < localStorage.length; index++) {
+            const key = localStorage.key(index);
+            if (key && key.startsWith('quiz_score_')) oldScoreKeys.push(key);
+        }
+
+        oldScoreKeys.forEach(key => {
+            let oldScore;
+            try {
+                oldScore = JSON.parse(localStorage.getItem(key));
+            } catch (error) {
+                console.error(`Unable to migrate old score ${key}.`, error);
+                return;
+            }
+            if (!oldScore || !oldScore.name || !oldScore.subject || !oldScore.class) return;
+            const id = `legacy-${key}`;
+            if (cbtResults.some(result => result.id === id) || cbtAttempts.some(attempt => attempt.id === id)) return;
+            const className = String(oldScore.class);
+            const normalizedName = String(oldScore.name).trim().toLowerCase().replace(/\s+/g, ' ');
+            const matchingStudents = cbtStudents.filter(student =>
+                String(student.name || '').trim().toLowerCase().replace(/\s+/g, ' ') === normalizedName &&
+                String(student.className || '').replace(/\s+/g, '').toLowerCase() === className.replace(/\s+/g, '').toLowerCase()
+            );
+            const migratedStudent = matchingStudents.length === 1 ? matchingStudents[0] : null;
+            const migratedStudentId = String(oldScore.studentId || (migratedStudent && (migratedStudent.studentId || migratedStudent.id)) || '');
+            const studentKey = migratedStudentId ? getStudentKey(migratedStudentId) : `legacy:${id}`;
+            const subjectId = String(oldScore.subject);
+            const subject = getSubjectSettings(subjectId);
+            const score = Number(oldScore.score) || 0;
+            const totalQuestions = Number(oldScore.totalQuestions) || 0;
+            const timestamp = oldScore.timestamp || new Date().toISOString();
+            const legacyRecord = {
+                id,
+                studentKey,
+                studentName: String(oldScore.name),
+                studentId: migratedStudentId,
+                name: String(oldScore.name),
+                class: className,
+                className,
+                subject: subject ? subject.name : subjectId,
+                subjectId,
+                score,
+                totalQuestions,
+                percentage: Number(oldScore.percentage) || (totalQuestions ? Math.round(score / totalQuestions * 100) : 0),
+                answeredCount: Number(oldScore.answeredCount) || 0,
+                unansweredCount: Number(oldScore.unansweredCount) || 0,
+                status: 'Completed',
+                timeUsed: '--',
+                timestamp,
+                dateCompleted: timestamp
+            };
+            cbtAttempts.push(legacyRecord);
+            cbtResults.push(legacyRecord);
+        });
+
+        if (saveCbtData('attempts', cbtAttempts) && saveCbtData('results', cbtResults)) {
+            localStorage.setItem(CBT_STORAGE_KEYS.legacyMigration, 'true');
+        }
+    } catch (error) {
+        console.error('Unable to migrate previous locally saved quiz results.', error);
+    }
+}
+
+migrateLegacyScores();
+saveCbtData('attempts', cbtAttempts);
+saveCbtData('results', cbtResults);
+
+function getSubjectSettings(subjectId) {
+    return cbtSubjects.find(subject => subject.id === subjectId);
+}
+
+function refreshCbtBranding() {
+    document.title = cbtSettings.platformName || defaultCbtSettings.platformName;
+    const schoolNameDisplay = document.getElementById('schoolNameDisplay');
+    if (schoolNameDisplay) schoolNameDisplay.textContent = cbtSettings.schoolName || '';
+}
+
+window.cbtApp = {
+    storageKeys: CBT_STORAGE_KEYS,
+    get students() { return cbtStudents; },
+    set students(value) { cbtStudents = value; saveCbtData('students', cbtStudents); },
+    get subjects() { return cbtSubjects; },
+    set subjects(value) { cbtSubjects = value; saveCbtData('subjects', cbtSubjects); },
+    get attempts() { return cbtAttempts; },
+    set attempts(value) { cbtAttempts = value; saveCbtData('attempts', cbtAttempts); },
+    get results() { return cbtResults; },
+    set results(value) { cbtResults = value; saveCbtData('results', cbtResults); },
+    get removedSubjects() { return cbtRemovedSubjects; },
+    set removedSubjects(value) { cbtRemovedSubjects = value; saveCbtData('removedSubjects', cbtRemovedSubjects); },
+    get settings() { return cbtSettings; },
+    set settings(value) { cbtSettings = value; saveCbtData('settings', cbtSettings); },
+    questions: quizData,
+    topicNames,
+    save(key) { return saveCbtData(key, this[key]); },
+    saveQuestions() { return saveCbtData('questions', quizData); },
+    refreshStudentSubjects,
+    refreshDurationPreview: updateDurationPreview,
+    refreshBranding: refreshCbtBranding
+};
+
+refreshCbtBranding();
+
 // Progress Bar Helper
 function updateProgressBar(current, total) {
     const bar = document.getElementById('progressBarFill');
@@ -1638,10 +1880,14 @@ let selectedAnswers = [];
 let timeRemaining = 0;
 let timerInterval = null;
 let startTime = 0;
-const SECONDS_PER_QUESTION = 40;
 let visitedQuestions = [];
 
 let studentName = '';
+let currentStudentId = '';
+let currentStudentKey = '';
+let currentStudentClass = '';
+let studentVerified = false;
+let currentAttemptId = '';
 let tabSwitchCount = 0;
 let examSubmitted = false;
 let examStarted = false;
@@ -1652,7 +1898,12 @@ const resultsScreen = document.getElementById('resultsScreen');
 
 const numQuestionsInput = document.getElementById('numQuestions');
 const difficultyBtns = document.querySelectorAll('.difficulty-btn');
-const topicBtns = document.querySelectorAll('.topic-btn');
+const topicGrid = document.querySelector('.topic-grid');
+const studentIdInput = document.getElementById('studentId');
+const studentLoginForm = document.getElementById('studentLoginForm');
+const studentLoginMessage = document.getElementById('studentLoginMessage');
+const studentExamOptions = document.getElementById('studentExamOptions');
+const verifiedStudentSummary = document.getElementById('verifiedStudentSummary');
 const startBtn = document.getElementById('startbtn');
 const nextBtn = document.getElementById('nextBtn');
 const quitBtn = document.getElementById('quitBtn');
@@ -1666,18 +1917,111 @@ const selectedClassDisplay = document.getElementById('selectedClassDisplay');
 const selectedTopicDisplay = document.getElementById('selectedTopicDisplay');
 const quizMessageEl = document.getElementById('quizMessage');
 
-topicBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-        topicBtns.forEach(b => {
+numQuestionsInput.value = String(cbtSettings.numberOfQuestions || 40);
+
+studentLoginForm.addEventListener('submit', event => {
+    event.preventDefault();
+    verifyStudentId();
+});
+
+studentIdInput.addEventListener('input', () => {
+    studentVerified = false;
+    studentName = '';
+    currentStudentId = '';
+    currentStudentKey = '';
+    currentStudentClass = '';
+    currentAttemptId = '';
+    selectedTopic = '';
+    selectedTopicDisplay.textContent = '';
+    verifiedStudentSummary.hidden = true;
+    studentExamOptions.hidden = true;
+    studentLoginMessage.textContent = '';
+    refreshStudentSubjects();
+});
+
+function verifyStudentId() {
+    const enteredId = studentIdInput.value.trim();
+    if (!enteredId) {
+        studentVerified = false;
+        studentName = '';
+        currentStudentId = '';
+        currentStudentKey = '';
+        currentStudentClass = '';
+        selectedTopic = '';
+        selectedTopicDisplay.textContent = '';
+        studentLoginMessage.textContent = 'Please enter your Student ID.';
+        verifiedStudentSummary.hidden = true;
+        studentExamOptions.hidden = true;
+        refreshStudentSubjects();
+        return false;
+    }
+
+    const student = findRegisteredStudent(enteredId);
+    if (!student) {
+        studentVerified = false;
+        studentName = '';
+        currentStudentId = '';
+        currentStudentKey = '';
+        currentStudentClass = '';
+        selectedTopic = '';
+        selectedTopicDisplay.textContent = '';
+        studentLoginMessage.textContent = 'Invalid Student ID. Please enter a registered Student ID.';
+        verifiedStudentSummary.hidden = true;
+        studentExamOptions.hidden = true;
+        refreshStudentSubjects();
+        return false;
+    }
+
+    const difficulty = getDifficultyForClass(student.className);
+    if (!difficulty) {
+        studentVerified = false;
+        studentName = '';
+        currentStudentId = '';
+        currentStudentKey = '';
+        currentStudentClass = '';
+        selectedTopic = '';
+        selectedTopicDisplay.textContent = '';
+        studentLoginMessage.textContent = 'The registered class is not supported for examinations.';
+        verifiedStudentSummary.hidden = true;
+        studentExamOptions.hidden = true;
+        refreshStudentSubjects();
+        return false;
+    }
+
+    studentName = String(student.name || '').trim();
+    currentStudentId = String(student.studentId || student.id).trim();
+    currentStudentClass = String(student.className || '').trim();
+    currentStudentKey = getStudentKey(currentStudentId);
+    selectedDifficulty = difficulty;
+    difficultyBtns.forEach(button => {
+        const selected = button.dataset.difficulty === selectedDifficulty;
+        button.classList.toggle('selected', selected);
+        button.setAttribute('aria-pressed', String(selected));
+    });
+    studentVerified = true;
+    studentLoginMessage.textContent = '';
+    verifiedStudentSummary.textContent = `${studentName} — ${currentStudentClass}`;
+    verifiedStudentSummary.hidden = false;
+    studentExamOptions.hidden = false;
+    refreshStudentSubjects();
+    return true;
+}
+
+topicGrid.addEventListener('click', event => {
+    const btn = event.target.closest('.topic-btn');
+    if (!btn || btn.disabled) return;
+    document.querySelectorAll('.topic-btn').forEach(b => {
             b.classList.remove('selected');
             b.setAttribute('aria-pressed', 'false');
-        });
-        btn.classList.add('selected');
-        btn.setAttribute('aria-pressed', 'true');
-        selectedTopic = btn.dataset.topic;
-        selectedTopicDisplay.textContent = topicNames[selectedTopic];
-        updateDurationPreview();
     });
+    btn.classList.add('selected');
+    btn.setAttribute('aria-pressed', 'true');
+    selectedTopic = btn.dataset.topic;
+    selectedTopicDisplay.textContent = (getSubjectSettings(selectedTopic) || {}).name || topicNames[selectedTopic];
+    refreshStudentSubjects();
+    const subject = getSubjectSettings(selectedTopic);
+    document.getElementById('subjectInstructions').textContent = subject ? subject.instructions : '';
+    updateDurationPreview();
 });
 
 difficultyBtns.forEach(btn => {
@@ -1689,6 +2033,7 @@ difficultyBtns.forEach(btn => {
         btn.classList.add('selected');
         btn.setAttribute('aria-pressed', 'true');
         selectedDifficulty = btn.dataset.difficulty;
+        if (selectedTopic) selectedClassDisplay.textContent = classMapping[selectedDifficulty];
         updateDurationPreview();
     });
 });
@@ -1715,6 +2060,89 @@ questionPalette.addEventListener('click', (event) => {
 });
 
 numQuestionsInput.addEventListener('input', updateDurationPreview);
+
+function refreshStudentSubjects() {
+    if (studentVerified) {
+        const registeredStudent = findRegisteredStudent(currentStudentId);
+        if (!registeredStudent) {
+            studentVerified = false;
+            studentName = '';
+            currentStudentId = '';
+            currentStudentKey = '';
+            currentStudentClass = '';
+            selectedTopic = '';
+            selectedTopicDisplay.textContent = '';
+            studentExamOptions.hidden = true;
+            verifiedStudentSummary.hidden = true;
+            studentLoginMessage.textContent = 'Invalid Student ID. Please enter a registered Student ID.';
+        } else {
+            studentName = String(registeredStudent.name || '').trim();
+            currentStudentClass = String(registeredStudent.className || '').trim();
+            selectedDifficulty = getDifficultyForClass(currentStudentClass);
+            if (!selectedDifficulty) {
+                studentVerified = false;
+                studentName = '';
+                currentStudentId = '';
+                currentStudentKey = '';
+                currentStudentClass = '';
+                selectedTopic = '';
+                selectedTopicDisplay.textContent = '';
+                studentExamOptions.hidden = true;
+                verifiedStudentSummary.hidden = true;
+                studentLoginMessage.textContent = 'The registered class is not supported for examinations.';
+                return;
+            }
+            verifiedStudentSummary.textContent = `${studentName} — ${currentStudentClass}`;
+            difficultyBtns.forEach(button => {
+                const selected = button.dataset.difficulty === selectedDifficulty;
+                button.classList.toggle('selected', selected);
+                button.setAttribute('aria-pressed', String(selected));
+            });
+        }
+    }
+    const subjectsById = new Map(cbtSubjects.map(subject => [subject.id, subject]));
+    Array.from(topicGrid.querySelectorAll('.topic-btn')).forEach(button => {
+        if (!subjectsById.has(button.dataset.topic)) button.remove();
+    });
+    if (selectedTopic && (!subjectsById.has(selectedTopic) || !subjectsById.get(selectedTopic).isEnabled)) {
+        selectedTopic = '';
+        selectedTopicDisplay.textContent = '';
+    }
+    cbtSubjects.forEach(subject => {
+        let button = Array.from(topicGrid.querySelectorAll('.topic-btn'))
+            .find(existingButton => existingButton.dataset.topic === subject.id);
+        if (!button) {
+            button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'topic-btn';
+            button.dataset.topic = subject.id;
+            topicGrid.appendChild(button);
+        }
+        button.textContent = subject.name;
+        const levelQuestions = quizData[subject.id] && quizData[subject.id][selectedDifficulty];
+        const hasQuestions = Array.isArray(levelQuestions) && levelQuestions.length > 0;
+        button.disabled = !studentVerified || !subject.isEnabled || !hasQuestions;
+        button.setAttribute('aria-pressed', String(subject.id === selectedTopic));
+        button.classList.toggle('selected', subject.id === selectedTopic);
+    });
+
+    difficultyBtns.forEach(button => {
+        const levelQuestions = selectedTopic && quizData[selectedTopic] && quizData[selectedTopic][button.dataset.difficulty];
+        const subject = selectedTopic && subjectsById.get(selectedTopic);
+        button.disabled = !studentVerified || !subject || !subject.isEnabled || !Array.isArray(levelQuestions) || levelQuestions.length === 0;
+    });
+    if (selectedTopic) {
+        const selectedSubject = subjectsById.get(selectedTopic);
+        selectedTopicDisplay.textContent = selectedSubject ? selectedSubject.name : '';
+        document.getElementById('subjectInstructions').textContent = selectedSubject ? selectedSubject.instructions : '';
+    } else {
+        selectedTopicDisplay.textContent = '';
+        document.getElementById('subjectInstructions').textContent = '';
+    }
+    updateDurationPreview();
+}
+
+refreshStudentSubjects();
 
 const antiCheatSystem = {
     navigationAttemptCount: 0,
@@ -2012,14 +2440,46 @@ function startQuiz() {
 
     if (examStarted || examSubmitted) return;
     antiCheatSystem.reset();
-    studentName = document.getElementById('studentName').value.trim();
-    if (!studentName) {
-        alert('يرجى إدخال اسمك!');
+    const registeredStudent = studentVerified && normalizeStudentId(studentIdInput.value) === normalizeStudentId(currentStudentId)
+        ? findRegisteredStudent(currentStudentId)
+        : null;
+    if (!registeredStudent) {
+        studentVerified = false;
+        studentName = '';
+        currentStudentId = '';
+        currentStudentKey = '';
+        currentStudentClass = '';
+        selectedTopic = '';
+        selectedTopicDisplay.textContent = '';
+        studentExamOptions.hidden = true;
+        verifiedStudentSummary.hidden = true;
+        studentLoginMessage.textContent = studentIdInput.value.trim()
+            ? 'Invalid Student ID. Please enter a registered Student ID.'
+            : 'Please enter your Student ID.';
+        refreshStudentSubjects();
         return;
     }
+    studentName = String(registeredStudent.name || '').trim();
+    currentStudentId = String(registeredStudent.studentId || registeredStudent.id).trim();
+    currentStudentClass = String(registeredStudent.className || '').trim();
+    currentStudentKey = getStudentKey(currentStudentId);
 
     if (!selectedTopic) {
         alert('يرجى اختيار المادة')
+        return;
+    }
+
+    const subjectSettings = getSubjectSettings(selectedTopic);
+    if (!subjectSettings || !subjectSettings.isEnabled) {
+        alert('THIS EXAM IS CURRENTLY DISABLED.');
+        refreshStudentSubjects();
+        return;
+    }
+
+    const classLevel = currentStudentClass;
+    const completedAttempt = findStudentSubjectAttempt(cbtAttempts, currentStudentId, selectedTopic, 'Completed');
+    if (completedAttempt) {
+        alert('You have already completed this examination. لقد أكملت هذا الامتحان من قبل.');
         return;
     }
 
@@ -2074,7 +2534,37 @@ function startQuiz() {
     visitedQuestions = new Array(currentQuiz.length).fill(false);
     startTime = Date.now();
 
-    timeRemaining = currentQuiz.length * SECONDS_PER_QUESTION;
+    timeRemaining = Math.max(1, Number(subjectSettings.durationMinutes) || cbtSettings.defaultDuration) * 60;
+    const previousPendingAttempt = findStudentSubjectAttempt(cbtAttempts, currentStudentId, selectedTopic, 'In Progress');
+    currentAttemptId = previousPendingAttempt
+        ? previousPendingAttempt.id
+        : `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pendingAttempt = {
+        ...(previousPendingAttempt || {}),
+        id: currentAttemptId,
+        studentKey: currentStudentKey,
+        studentName,
+        studentId: currentStudentId,
+        className: classLevel,
+        subjectId: selectedTopic,
+        subjectName: subjectSettings.name,
+        status: 'In Progress',
+        score: 0,
+        totalQuestions: currentQuiz.length,
+        percentage: 0,
+        dateStarted: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
+        timeUsed: '00:00',
+        durationMinutes: Math.max(1, Number(subjectSettings.durationMinutes) || cbtSettings.defaultDuration)
+    };
+    cbtAttempts = cbtAttempts.filter(attempt => attempt.id !== currentAttemptId).concat(pendingAttempt);
+    cbtResults = cbtResults.filter(result => result.id !== currentAttemptId).concat(pendingAttempt);
+    const attemptSaved = saveCbtData('attempts', cbtAttempts);
+    const resultSaved = saveCbtData('results', cbtResults);
+    if (!attemptSaved || !resultSaved) {
+        alert('تعذر حفظ محاولة الاختبار على هذا الجهاز. يرجى التحقق من مساحة التخزين.');
+        return;
+    }
     examStarted = true;
     examSubmitted = false;
     startTimer();
@@ -2084,9 +2574,10 @@ function startQuiz() {
     showScreen('quiz');
     quitBtn.disabled = false;
     document.getElementById('toggleReviewBtn').disabled = true;
-    selectedClassDisplay.textContent = classMapping[selectedDifficulty] || 'JSS 2';
+    selectedClassDisplay.textContent = currentStudentClass;
     displayQuestion();
     document.getElementById('studentNameDisplay').textContent = studentName;
+    document.getElementById('selectedTopicDisplay').textContent = subjectSettings.name;
 }
 function startTimer() {
     if (!examStarted || examSubmitted || timerInterval !== null) return;
@@ -2225,14 +2716,9 @@ function updateDurationPreview() {
     const availableQuestions = selectedTopic && quizData[selectedTopic] && quizData[selectedTopic][selectedDifficulty]
         ? quizData[selectedTopic][selectedDifficulty].length
         : 60;
-    const effectiveCount = Math.min(count, availableQuestions);
-    const duration = effectiveCount * SECONDS_PER_QUESTION;
-    const minutes = Math.floor(duration / 60);
-    const seconds = duration % 60;
+    const minutes = Math.max(1, Number((getSubjectSettings(selectedTopic) || {}).durationMinutes) || cbtSettings.defaultDuration);
     const formatArabic = value => new Intl.NumberFormat('ar').format(value);
-    const durationText = seconds
-        ? `المدة التقديرية: ${formatArabic(minutes)} دقيقة و${formatArabic(seconds)} ثانية.`
-        : `المدة التقديرية: ${formatArabic(minutes)} دقيقة.`;
+    const durationText = `مدة الاختبار: ${formatArabic(minutes)} دقيقة.`;
     durationPreview.textContent = count > availableQuestions
         ? `المتاح لهذه المادة ${formatArabic(availableQuestions)} سؤالاً كحد أقصى. ${durationText}`
         : durationText;
@@ -2262,46 +2748,17 @@ async function finishQuiz() {
     examSubmitted = true;
     antiCheatSystem.disable();
 
-    console.log('[FINISH-QUIZ] Quiz submission initiated');
-
-    // Stop timer
     clearInterval(timerInterval);
     timerInterval = null;
     examStarted = false;
 
-    // Calculate score
     calculateScore();
-    console.log(`[FINISH-QUIZ] Score calculated: ${score}/${currentQuiz.length}`);
-
-    // Map difficulty to class level
-    const classMapping = {
-        easy: 'JSS 1',
-        medium: 'JSS 2',
-        hard: 'JSS 3'
-    };
-    const classLevel = classMapping[selectedDifficulty] || 'JSS 2';
-
-    // Save to Firebase and wait for completion
-    try {
-        console.log('[FINISH-QUIZ] Saving to Firebase...');
-        const savedResult = await saveScoreToServer(studentName, score, classLevel, currentQuiz.length);
-        const saveStatus = document.getElementById('saveStatus');
-        if (savedResult && savedResult.source) {
-            saveStatus.textContent = savedResult.storedLocally
-                ? 'تعذر الحفظ على الخادم؛ تم حفظ النتيجة على هذا الجهاز فقط.'
-                : 'تعذر حفظ النتيجة. يرجى إبلاغ مسؤول الاختبار.';
-        } else {
-            saveStatus.textContent = 'تم حفظ النتيجة.';
-        }
-        console.log('[FINISH-QUIZ] Firebase save completed successfully');
-    } catch (error) {
-        console.error('[FINISH-QUIZ] Firebase save failed, showing results anyway:', error);
-        document.getElementById('saveStatus').textContent = 'تعذر حفظ النتيجة. يرجى إبلاغ مسؤول الاختبار.';
-        // Continue to results screen even if Firebase fails
-    }
-
-    // Transition to results screen
-    console.log('[FINISH-QUIZ] Transitioning to results screen');
+    const resultSaved = saveCompletedAttempt(studentName, score, currentStudentClass, currentQuiz.length);
+    document.getElementById('saveStatus').textContent = resultSaved
+        ? (cbtSettings.allowResults ? 'تم حفظ النتيجة على هذا الجهاز.' : 'تم حفظ النتيجة، وسيتم إعلانها من إدارة المدرسة.')
+        : 'تعذر حفظ النتيجة على هذا الجهاز. يرجى إبلاغ مسؤول الاختبار.';
+    restartBtn.disabled = false;
+    resultsScreen.classList.toggle('results-hidden', !cbtSettings.allowResults);
     showScreen('results');
 
     antiCheatSystem.disable();
@@ -2347,6 +2804,12 @@ function calculateScore() {
         message = `❌ Fail.<br>Grade: F`;
         passed = false;
     }
+    const passingScore = Number.isFinite(Number(cbtSettings.passingScore))
+        ? Number(cbtSettings.passingScore)
+        : 50;
+    passed = percentage >= passingScore;
+    if (!passed) message = '❌ Fail.<br>Grade: F';
+    else if (percentage < 50) message = '⚠ Pass.<br>Grade: D';
     document.getElementById('finalScore').textContent = `${score}/${currentQuiz.length}`;
     document.getElementById('scoreMessage').innerHTML = message;
     document.getElementById('correctCount').textContent = score;
@@ -2355,7 +2818,10 @@ function calculateScore() {
     document.getElementById('unansweredCount').textContent = unansweredCount;
     document.getElementById('percentage').textContent = `${percentage}%`;
     document.getElementById('timeTaken').textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    document.getElementById('topicResult').textContent = topicNames[selectedTopic] || selectedTopic.charAt(0).toUpperCase() + selectedTopic.slice(1);
+    const subjectSettings = getSubjectSettings(selectedTopic);
+    document.getElementById('topicResult').textContent = subjectSettings
+        ? subjectSettings.name
+        : topicNames[selectedTopic] || selectedTopic.charAt(0).toUpperCase() + selectedTopic.slice(1);
 
     const classMapping = {
         easy: 'JSS 1',
@@ -2363,7 +2829,7 @@ function calculateScore() {
         hard: 'JSS 3'
     };
     document.getElementById('studentNameResult').textContent = studentName || 'N/A';
-    document.getElementById('classResult').textContent = classMapping[selectedDifficulty] || 'JSS 2';
+    document.getElementById('classResult').textContent = currentStudentClass;
     document.getElementById('saveStatus').textContent = 'جارٍ حفظ النتيجة...';
 
     // Play sound and show effect
@@ -2377,7 +2843,7 @@ function calculateScore() {
                 passSound.volume = 1;
                 passSound.play().catch(() => { });
             }
-        } else if (percentage < 50) {
+        } else if (!passed) {
             if (typeof launchFailEffect === 'function') launchFailEffect();
             const failSound = document.getElementById('failSound');
             if (failSound) {
@@ -2390,48 +2856,39 @@ function calculateScore() {
     }, 100);
 }
 
-// === ADD THIS ===
-function saveScoreToServer(name, score, classLevel, totalQuestions) {
+function saveCompletedAttempt(name, score, classLevel, totalQuestions) {
     const answeredCount = selectedAnswers.filter(answer => answer !== null && answer !== undefined).length;
+    const timeTaken = Math.floor((Date.now() - startTime) / 1000);
+    const timeUsed = `${String(Math.floor(timeTaken / 60)).padStart(2, '0')}:${String(timeTaken % 60).padStart(2, '0')}`;
+    const subjectSettings = getSubjectSettings(selectedTopic);
     const scoreData = {
+        id: currentAttemptId,
+        studentKey: currentStudentKey,
+        studentName: name,
+        studentId: currentStudentId,
         name,
         class: classLevel,
-        subject: selectedTopic,
+        className: classLevel,
+        subject: subjectSettings ? subjectSettings.name : selectedTopic,
+        subjectId: selectedTopic,
         score,
-        scoreOver60: Math.round((score / totalQuestions) * 60),
         percentage: Math.round((score / totalQuestions) * 100),
         totalQuestions,
         answeredCount,
         unansweredCount: totalQuestions - answeredCount,
-        timestamp: new Date()
+        status: 'Completed',
+        timeUsed,
+        timestamp: new Date().toISOString()
     };
 
-    const saveLocally = source => {
-        scoreData.source = source;
-        scoreData.timestamp = scoreData.timestamp.toISOString();
-        scoreData.storedLocally = false;
-        try {
-            localStorage.setItem(`quiz_score_${Date.now()}`, JSON.stringify(scoreData));
-            scoreData.storedLocally = true;
-        } catch (error) {
-            console.warn('[FIREBASE] Local fallback storage unavailable:', error);
-        }
-        return scoreData;
-    };
-
-    if (!window.db || !window.addDoc || !window.collection) {
-        console.warn('[FIREBASE] Firebase not ready, storing locally');
-        return Promise.resolve(saveLocally('local'));
-    }
-
-    return Promise.resolve()
-        .then(() => window.addDoc(window.collection(window.db, 'cbt_scores_arabic'), scoreData))
-        .catch(error => {
-            console.error('[FIREBASE] Error saving score:', error);
-            return saveLocally('local_fallback');
-        });
+    cbtAttempts = cbtAttempts.map(attempt => attempt.id === currentAttemptId
+        ? { ...attempt, ...scoreData, dateCompleted: scoreData.timestamp }
+        : attempt);
+    cbtResults = cbtResults.filter(result => result.id !== currentAttemptId).concat(scoreData);
+    const attemptSaved = saveCbtData('attempts', cbtAttempts);
+    const resultSaved = saveCbtData('results', cbtResults);
+    return attemptSaved && resultSaved;
 }
-// View saved scores in Firebase Console → Firestore → cbt_scores
 
 function quitQuiz() {
     const confirmSubmit = confirm('هل أنت متأكد من أنك تريد تسليم امتحانك؟ لا يمكنك تغيير إجاباتك بعد التسليم.');
@@ -2447,6 +2904,11 @@ function restartQuiz() {
 
     studentName = '';
     document.getElementById('studentNameDisplay').textContent = '';
+    currentStudentClass = '';
+    studentVerified = false;
+    studentExamOptions.hidden = true;
+    verifiedStudentSummary.hidden = true;
+    studentLoginMessage.textContent = '';
     tabSwitchCount = 0;
     examSubmitted = false;
     examStarted = false;
@@ -2469,15 +2931,24 @@ function restartQuiz() {
     document.getElementById('toggleReviewBtn').textContent = 'عرض مراجعة الأسئلة';
 
     // Reset UI
-    topicBtns.forEach(btn => btn.classList.remove('selected'));
+    document.querySelectorAll('.topic-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        btn.setAttribute('aria-pressed', 'false');
+    });
     difficultyBtns.forEach(btn => btn.classList.remove('selected'));
     difficultyBtns[1].classList.add('selected');
     difficultyBtns.forEach((btn, index) => btn.setAttribute('aria-pressed', String(index === 1)));
-    numQuestionsInput.value = '40';
-    document.getElementById('studentName').value = '';
+    numQuestionsInput.value = String(cbtSettings.numberOfQuestions || 40);
+    restartBtn.disabled = true;
+    studentIdInput.value = '';
+    currentStudentId = '';
+    currentStudentKey = '';
+    currentAttemptId = '';
+    resultsScreen.classList.remove('results-hidden');
     // === END ADD ===
 
     showScreen('start');
+    refreshStudentSubjects();
     updateDurationPreview();
     antiCheatSystem.cleanup();
 

@@ -44,7 +44,7 @@
             <h2 id="guidelineTitle">إرشادات الاختبار</h2>
             <ul>
                 <li>اختر المادة والمرحلة قبل بدء الاختبار.</li>
-                <li>لديك 40 ثانية لكل سؤال، ويظهر الوقت الإجمالي قبل البدء.</li>
+                <li>مدة الاختبار محددة لكل مادة، وتظهر قبل البدء.</li>
                 <li>يبدأ العد التنازلي فور النقر على زر "ابدأ".</li>
                 <li>يتم تغيير ترتيب الأسئلة والاختيارات في كل مرة.</li>
                 <li>يمكنك الرجوع إلى الأسئلة السابقة.</li>
@@ -60,12 +60,18 @@
         <div id="startScreen" class="screen active">
             <h1>📋 امتحان إلكتروني (CBT)</h1>
             <p class="subtitle">أكمل امتحاناتك بدقة وانضباط.</p>
+            <p id="schoolNameDisplay" class="field-hint"></p>
+            <button id="openAdminBtn" class="admin-entry-btn" type="button">Administrator Login</button>
 
-            <div class="form-group">
-                <label for="studentName">اسم الطالب (مطلوب):</label>
-                <input type="text" id="studentName" placeholder="أدخل اسمك الكامل" autocomplete="name" required>
-            </div>
+            <form id="studentLoginForm" class="form-group">
+                <label for="studentId">رقم الطالب (مطلوب):</label>
+                <input type="text" id="studentId" placeholder="مثال: JSS2-001" autocomplete="username" required>
+                <button class="btn" id="verifyStudentBtn" type="submit" style="margin-top: 10px;">متابعة</button>
+                <p id="studentLoginMessage" class="field-hint" role="status" aria-live="polite"></p>
+                <p id="verifiedStudentSummary" class="field-hint" aria-live="polite" hidden></p>
+            </form>
 
+            <div id="studentExamOptions" hidden>
             <div class="form-group">
                 <label>اختر المادة:</label>
                 <div class="topic-grid">
@@ -89,7 +95,7 @@
                     <button class="topic-btn" data-topic="nahw_3" disabled>النحو للثالث الإعدادي</button>
                     <button class="topic-btn" data-topic="aqeedah_2" disabled>العقيدة ٢</button>
                     <button class="topic-btn" data-topic="usul_fiqh_2" disabled>أصول الفقه 3</button>
-                    <button class="topic-btn" data-topic="usul_fiqh_1"></button>
+                    <button class="topic-btn" data-topic="usul_fiqh_1" disabled></button>
                     <button class="topic-btn" data-topic="balagha_2" disabled>البلاغة ٢</button>
                     <button class="topic-btn" data-topic="faraid_2" disabled>الفرائض ٢</button>
                     <button class="topic-btn" data-topic="balagha_1" disabled>البلاغة ١</button>
@@ -98,6 +104,7 @@
                     <button class="topic-btn" data-topic="faraid_3">الفرائض ٣</button>
                     <button class="topic-btn" data-topic="arood_3" disabled>العروض ٣</button>
                 </div>
+                <p id="subjectInstructions" class="field-hint" aria-live="polite"></p>
             </div>
 
             <div class="form-group">
@@ -106,8 +113,8 @@
                 <p id="durationPreview" class="field-hint" aria-live="polite">المدة: ٢٦ دقيقة و٤٠ ثانية عند اختيار ٤٠ سؤالاً.</p>
             </div>
 
-            <div class="form-group">
-                <label>المرحلة:</label>
+            <div class="form-group" hidden>
+                <label>المرحلة (من سجل الطالب):</label>
                 <div class="difficulty-options">
                     <button class="difficulty-btn" data-difficulty="easy" disabled>المرحلة ١</button>
                     <button class="difficulty-btn selected" data-difficulty="medium">المرحلة ٢</button>
@@ -116,6 +123,7 @@
             </div>
 
             <button class="btn" id="startbtn">ابدأ الاختبار</button>
+            </div>
         </div>
 
         <!-- Quiz Screen -->
@@ -239,6 +247,8 @@
 
     </div>
 
+    <main id="adminPortal" class="admin-portal" hidden></main>
+
     <!-- Effects -->
     <canvas id="confettiCanvas"></canvas>
 
@@ -246,39 +256,9 @@
     <audio id="passSound" src="Successes.mp3"></audio>
     <audio id="failSound" src="Failure.mp3"></audio>
 
-    <!-- Firebase CDN -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-
-        // Placeholder Firebase config - replace with your actual config
-        const firebaseConfig = {
-            apiKey: "AIzaSyAJaem6_icKmg04_SoiSyWrWBAiLC7TSPU",
-            authDomain: "cbt-exam-eng.firebaseapp.com",
-            projectId: "cbt-exam-eng",
-            storageBucket: "cbt-exam-eng.firebasestorage.app",
-            messagingSenderId: "138024431357",
-            appId: "1:138024431357:web:0347c448991e28fc6fd894",
-            measurementId: "G-FYBM55P9JD"
-        };
-
-        try {
-            const app = initializeApp(firebaseConfig);
-            window.db = getFirestore(app);
-            window.addDoc = addDoc;
-            window.collection = collection;
-        } catch (error) {
-            window.db = null;
-            window.addDoc = null;
-            window.collection = null;
-            console.error('Firebase initialization failed; local score fallback will be used.', error);
-        }
-
-
-    </script>
-
     <script src="failEffect.js" defer></script>
     <script src="script.js" defer></script>
+    <script src="admin.js" defer></script>
 
 </body>
 
