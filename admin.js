@@ -1,10 +1,15 @@
+// ---------------------------------------------------------------------------
+// Administrator authentication
+// ---------------------------------------------------------------------------
+// This portal no longer uses hardcoded frontend credentials. Sign-in goes
+// through Firebase Email/Password (firebase.js -> window.cbtBackend.signIn),
+// which additionally refuses any account whose email is not the approved
+// administrator address. The authoritative enforcement lives in
+// firestore.rules (`request.auth.token.email`), so hiding this check in the
+// client is only defence in depth.
 const adminRoot = document.getElementById('adminPortal');
 const studentApp = document.querySelector('.container');
 const adminEntryButton = document.getElementById('openAdminBtn');
-
-// CHANGE ADMIN LOGIN DETAILS HERE. This frontend-only gate is not secure authentication.
-const ADMIN_USERNAME = 'ABU HAFS IZZUL-ARAB';
-const ADMIN_PASSWORD = '1234567890';
 
 let adminLoggedIn = false;
 let adminSection = 'Dashboard';
@@ -155,17 +160,182 @@ function hasDuplicateStudentId(studentId, ignoredRecordId = '') {
     );
 }
 
-function saveAdminData(key) {
-    const saved = key === 'questions'
-        ? window.cbtApp.saveQuestions()
-        : window.cbtApp.save(key);
-    if (!saved) {
+/**
+ * Persists an admin change to Firestore (the authoritative store) and refreshes
+ * the local cache. Returns a Promise<boolean> so callers can await it.
+ *
+ * The in-memory arrays in script.js are updated synchronously by the callers, so
+ * the UI re-renders immediately; this function is what makes the change durable
+ * and visible to every other client.
+ */
+async function saveAdminData(key) {
+    if (!window.cbtBackend) {
         adminStorageError = true;
-        showAdminNotice('Could not save changes. Check available browser storage and try again.', true);
+        showAdminNotice('Firebase did not load. Changes cannot be saved.', true);
         return false;
     }
-    adminStorageError = false;
-    return true;
+
+    try {
+        switch (key) {
+            case 'students':
+                await window.cbtBackend.saveStudents(window.cbtApp.students);
+                break;
+            case 'subjects':
+                await window.cbtBackend.saveSubjects(window.cbtApp.subjects);
+                break;
+            case 'settings':
+                await window.cbtBackend.saveSettings(window.cbtApp.settings);
+                break;
+            case 'questions':
+                await window.cbtBackend.saveQuestions(window.cbtApp.questions);
+                break;
+            case 'removedSubjects':
+                await window.cbtBackend.saveRemovedSubjects(window.cbtApp.removedSubjects);
+                await window.cbtBackend.deleteQuestions(window.cbtApp.removedSubjects);
+                break;
+            case 'attempts':
+            case 'results':
+                // Attempts and results are student-owned documents. The admin may
+                // correct them, but their ID and identity fields are pinned by the
+                // rules, so rewrite each changed document in place.
+                await persistAdminAttempts();
+                break;
+            default:
+                break;
+        }
+        adminStorageError = false;
+        return true;
+    } catch (error) {
+        console.error(`[admin] could not save ${key}`, error);
+        adminStorageError = true;
+        showAdminNotice(
+            (error && error.message) || 'Could not save changes to Firestore. Check your connection and try again.',
+            true
+        );
+        return false;
+    }
+}
+
+/**
+ * Writes every in-memory attempt back to Firestore.
+ *
+ * The rules pin an attempt's studentId/subjectId/id, so only the mutable
+ * scoring/status fields are rewritten; the document keeps its identity.
+ */
+async function persistAdminAttempts() {
+    const attempts = window.cbtApp.attempts || [];
+    for (const attempt of attempts) {
+        await window.cbtBackend.writeAttempt(attempt);
+    }
+}
+
+/**
+ * Creates or edits a student, then persists the roster.
+ *
+ * DOCUMENTED LIMITATION: renaming a Student ID changes the deterministic attempt
+ * document IDs (they are derived from the ID). Firestore rules pin an attempt's
+ * studentId/subjectId, so an existing attempt CANNOT be re-pointed at the new ID
+ * in place. We therefore write the renamed attempt under its NEW ID and delete
+ * the old document, which keeps history intact without breaking the rules.
+ */
+async function handleStudentForm(values) {
+    const originalId = String(values.get('originalId') || '');
+    const previousStudent = window.cbtApp.students.find(entry => String(entry.id) === originalId);
+    const student = {
+        id: originalId || String(values.get('studentId')).trim(),
+        name: String(values.get('name')).trim(),
+        studentId: String(values.get('studentId')).trim(),
+        className: String(values.get('className')).trim()
+    };
+    if (!student.id || !student.name || !student.studentId || !student.className) return;
+    if (hasDuplicateStudentId(student.studentId, originalId)) {
+        return showAdminNotice('Student ID already exists.', true);
+    }
+
+    const renamed =
+        previousStudent &&
+        String(previousStudent.studentId || previousStudent.id).trim().toUpperCase() !==
+        student.studentId.trim().toUpperCase();
+
+    if (renamed) {
+        // Re-key every existing attempt to the new Student ID BEFORE saving.
+        const previousId = String(previousStudent.studentId || previousStudent.id).trim();
+        const previousKey = `id:${previousId.toLowerCase()}`;
+        const updatedKey = `id:${student.studentId.toLowerCase()}`;
+        const renameFields = {
+            studentKey: updatedKey,
+            studentId: student.studentId,
+            studentName: student.name,
+            name: student.name,
+            className: student.className,
+            class: student.className
+        };
+
+        window.cbtApp.attempts = window.cbtApp.attempts.map(attempt => {
+            if (attempt.studentKey !== previousKey) return attempt;
+            const newId = window.cbtBackend.buildAttemptId(student.studentId, attempt.subjectId);
+            return { ...attempt, ...renameFields, id: newId };
+        });
+        window.cbtApp.results = window.cbtApp.results.map(result => {
+            if (result.studentKey !== previousKey) return result;
+            const newId = window.cbtBackend.buildAttemptId(student.studentId, result.subjectId);
+            return { ...result, ...renameFields, id: newId };
+        });
+
+        // Delete the documents that were stored under the OLD deterministic IDs.
+        // The renamed attempts are written under their new IDs by
+        // persistAdminAttempts() below.
+        window.cbtApp.attempts.forEach(attempt => {
+            const oldId = window.cbtBackend.buildAttemptId(previousId, attempt.subjectId);
+            if (oldId !== attempt.id) {
+                window.cbtBackend.deleteAttempt(oldId).catch(error => {
+                    console.warn('[admin] could not delete the pre-rename attempt document', error);
+                });
+            }
+        });
+    }
+
+    window.cbtApp.students = originalId
+        ? window.cbtApp.students.map(entry => String(entry.id) === originalId ? student : entry)
+        : window.cbtApp.students.concat(student);
+
+    const saved = await saveAdminData('students');
+    if (saved && renamed) {
+        // persistAdminAttempts rewrites every attempt under its new ID.
+        await persistAdminAttempts();
+    }
+    renderAdminPage();
+    if (saved) showAdminNotice('Student saved.');
+}
+
+/**
+ * Signs in with Firebase Email/Password, then loads the admin-only roster and
+ * results before revealing the dashboard.
+ *
+ * Nothing is rendered until loadAdminRecords() succeeds, so a failed rules
+ * check can never leave an empty dashboard looking like "no data".
+ */
+async function handleAdminLogin(email, password) {
+    try {
+        // signIn() additionally enforces that the account's email is the
+        // approved administrator address.
+        await window.cbtBackend.signIn(email, password);
+        const records = await window.cbtBackend.loadAdminRecords();
+        window.cbtApp.students = records.students;
+        window.cbtApp.attempts = records.attempts;
+        window.cbtApp.results = records.results;
+        // Offer to seed the roster from the built-in sample list when the project
+        // is brand new and Firestore has no students yet.
+        await window.cbtBackend.seedRosterIfEmpty(window.cbtApp.sampleStudents || []);
+        const refreshed = await window.cbtBackend.loadAdminRecords();
+        window.cbtApp.students = refreshed.students;
+        adminLoggedIn = true;
+        adminSection = 'Dashboard';
+        renderAdminPage();
+    } catch (error) {
+        console.error('[admin] sign in failed', error);
+        showAdminLogin((error && error.message) || 'Unable to sign in. Please try again.');
+    }
 }
 
 function showAdminNotice(message, isError = false) {
@@ -182,17 +352,33 @@ function showAdminNotice(message, isError = false) {
     }, 4500);
 }
 
-function showAdminLogin(message = '') {
+async function showAdminLogin(message = '') {
+    const backend = window.cbtBackend;
+    let statusNote = '';
+    if (backend) {
+        const status = await backend.status();
+        if (status.state === 'unconfigured') {
+            statusNote = 'Firebase is not configured yet. Add the Web app values to firebase.config.js before signing in.';
+        } else if (status.state === 'error') {
+            statusNote = status.error || 'Firebase could not start. Check your internet connection.';
+        } else if (!navigator.onLine) {
+            statusNote = 'You are offline. The administrator panel needs an internet connection.';
+        }
+    } else {
+        statusNote = 'Firebase did not load. Check that firebase.js is reachable.';
+    }
+
     adminRoot.innerHTML = `
         <section class="admin-login-card">
             <button type="button" class="admin-back-link" data-action="close-admin">← Back to student exam</button>
             <p class="admin-eyebrow">School CBT System</p>
             <h1>Administrator Login</h1>
-            <p class="admin-muted">Use the sample credentials configured in admin.js.</p>
-            <div class="admin-security-note">This is only a frontend gate. It does not provide secure authentication.</div>
+            <p class="admin-muted">Sign in with the administrator email address and password.</p>
+            ${statusNote ? `<div class="admin-security-note">${escapeAdminText(statusNote)}</div>` : ''}
             <p class="admin-login-error" role="alert">${escapeAdminText(message)}</p>
             <form data-form="login" class="admin-form">
-                <label>Username<input name="username" autocomplete="username" required></label>
+                <label>Administrator email<input name="username" type="email" autocomplete="username"
+                    value="${escapeAdminText(window.cbtAdminEmail || 'abuhafs8007@gmail.com')}" required></label>
                 <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
                 <button class="admin-primary-button" type="submit">Log in</button>
             </form>
@@ -697,21 +883,69 @@ function openAdmin() {
     studentApp.hidden = true;
     studentApp.style.display = 'none';
     adminRoot.hidden = false;
+    // If a valid admin session already exists (e.g. the page was reloaded), go
+    // straight to the dashboard instead of showing the login form.
+    if (window.cbtBackend && window.cbtBackend.isAdminUser()) {
+        restoreAdminSession();
+        return;
+    }
     showAdminLogin();
 }
 
 function closeAdmin(logout = false) {
-    if (logout) adminLoggedIn = false;
+    if (logout) {
+        adminLoggedIn = false;
+        if (window.cbtBackend) window.cbtBackend.signOut();
+    }
     adminRoot.hidden = true;
     studentApp.hidden = false;
     studentApp.style.display = '';
     window.cbtApp.refreshStudentSubjects();
 }
 
-function removeAttempt(attemptId) {
+/**
+ * Re-loads the admin-only roster and results for an already-authenticated
+ * session. Called on page load when Firebase reports a valid admin session.
+ */
+async function restoreAdminSession() {
+    try {
+        const records = await window.cbtBackend.loadAdminRecords();
+        window.cbtApp.students = records.students;
+        window.cbtApp.attempts = records.attempts;
+        window.cbtApp.results = records.results;
+        adminLoggedIn = true;
+        renderAdminPage();
+    } catch (error) {
+        console.error('[admin] could not restore the admin session', error);
+        adminLoggedIn = false;
+        showAdminLogin((error && error.message) || 'Your session is no longer valid. Please sign in again.');
+    }
+}
+
+/**
+ * Deletes an attempt (and its public status marker) from Firestore, then drops
+ * it from the in-memory arrays so the UI re-renders without it.
+ *
+ * 'attempts' and 'results' are the SAME Firestore collection, so a single
+ * deletion covers both views; the second saveAdminData call is intentionally
+ * not needed.
+ */
+async function removeAttempt(attemptId) {
+    try {
+        await window.cbtBackend.deleteAttempt(attemptId);
+    } catch (error) {
+        console.error('[admin] could not delete the attempt', error);
+        adminStorageError = true;
+        showAdminNotice(
+            (error && error.message) || 'Could not delete the attempt from Firestore.',
+            true
+        );
+        return false;
+    }
     window.cbtApp.attempts = window.cbtApp.attempts.filter(attempt => attempt.id !== attemptId);
     window.cbtApp.results = window.cbtApp.results.filter(result => result.id !== attemptId);
-    return saveAdminData('attempts') && saveAdminData('results');
+    adminStorageError = false;
+    return true;
 }
 
 function buildResultFromAttempt(attempt) {
@@ -1014,8 +1248,9 @@ adminRoot.addEventListener('click', event => {
         const completedAttempt = { ...attempt, status: 'Completed', dateCompleted: new Date().toISOString() };
         window.cbtApp.attempts = window.cbtApp.attempts.map(entry => entry.id === id ? completedAttempt : entry);
         window.cbtApp.results = window.cbtApp.results.filter(result => result.id !== id).concat(buildResultFromAttempt(completedAttempt));
+        // 'attempts' and 'results' are the same Firestore collection, so one save
+        // covers both views.
         saveAdminData('attempts');
-        saveAdminData('results');
         renderAdminPage();
         return;
     }
@@ -1041,7 +1276,6 @@ adminRoot.addEventListener('click', event => {
         window.cbtApp.attempts = window.cbtApp.attempts.map(entry => entry.id === id ? editedAttempt : entry);
         window.cbtApp.results = window.cbtApp.results.filter(result => result.id !== id).concat(buildResultFromAttempt(editedAttempt));
         saveAdminData('attempts');
-        saveAdminData('results');
         renderAdminPage();
         return;
     }
@@ -1088,55 +1322,18 @@ adminRoot.addEventListener('change', event => {
 adminRoot.addEventListener('submit', event => {
     event.preventDefault();
     const form = event.target;
+    // The submit handler is async (Firebase sign-in and Firestore writes), so
+    // read the FormData synchronously before any await.
     const values = new FormData(form);
 
     if (form.dataset.form === 'login') {
-        if (values.get('username') === ADMIN_USERNAME && values.get('password') === ADMIN_PASSWORD) {
-            adminLoggedIn = true;
-            adminSection = 'Dashboard';
-            renderAdminPage();
-        } else {
-            showAdminLogin('Incorrect username or password.');
-        }
+        const submitButton = form.querySelector('button[type="submit"]');
+        if (submitButton) submitButton.disabled = true;
+        handleAdminLogin(values.get('username'), values.get('password'));
         return;
     }
     if (form.dataset.form === 'student') {
-        const originalId = String(values.get('originalId') || '');
-        const previousStudent = window.cbtApp.students.find(entry => String(entry.id) === originalId);
-        const student = {
-            id: originalId || String(values.get('studentId')).trim(),
-            name: String(values.get('name')).trim(),
-            studentId: String(values.get('studentId')).trim(),
-            className: String(values.get('className')).trim()
-        };
-        if (!student.id || !student.name || !student.studentId || !student.className) return;
-        if (hasDuplicateStudentId(student.studentId, originalId)) {
-            return showAdminNotice('Student ID already exists.', true);
-        }
-        window.cbtApp.students = originalId
-            ? window.cbtApp.students.map(entry => String(entry.id) === originalId ? student : entry)
-            : window.cbtApp.students.concat(student);
-        saveAdminData('students');
-        if (previousStudent) {
-            const previousKey = `id:${String(previousStudent.studentId || previousStudent.id).toLowerCase()}`;
-            const updatedKey = `id:${student.studentId.toLowerCase()}`;
-            if (previousKey !== updatedKey) {
-                window.cbtApp.attempts = window.cbtApp.attempts.map(attempt =>
-                    attempt.studentKey === previousKey
-                        ? { ...attempt, studentKey: updatedKey, studentId: student.studentId, studentName: student.name, name: student.name, className: student.className, class: student.className }
-                        : attempt
-                );
-                window.cbtApp.results = window.cbtApp.results.map(result =>
-                    result.studentKey === previousKey
-                        ? { ...result, studentKey: updatedKey, studentId: student.studentId, studentName: student.name, name: student.name, className: student.className, class: student.className }
-                        : result
-                );
-                saveAdminData('attempts');
-                saveAdminData('results');
-            }
-        }
-        renderAdminPage();
-        showAdminNotice('Student saved.');
+        handleStudentForm(values);
         return;
     }
     if (form.dataset.form === 'question') {
@@ -1235,3 +1432,22 @@ adminRoot.addEventListener('submit', event => {
         showAdminNotice('Settings saved.');
     }
 });
+
+// ---------------------------------------------------------------------------
+// Firebase session handling
+// ---------------------------------------------------------------------------
+// Keeps the panel's logged-in state in sync with the real Firebase session.
+// If the session ends anywhere (expiry, sign-out in another tab), the panel
+// drops back to the login screen and the admin-only in-memory data is cleared,
+// so results cannot be left on screen after sign-out.
+if (window.cbtBackend) {
+    window.cbtBackend.onAuthChange((user) => {
+        if (user) return;
+        if (!adminLoggedIn) return;
+        adminLoggedIn = false;
+        window.cbtApp.students = [];
+        window.cbtApp.attempts = [];
+        window.cbtApp.results = [];
+        if (!adminRoot.hidden) showAdminLogin('Your session has ended. Please sign in again.');
+    });
+}

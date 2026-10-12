@@ -1,0 +1,182 @@
+rules_version = '2';
+
+// ---------------------------------------------------------------------------
+// Least-privilege Firestore rules for the Arabic CBT platform.
+// Deny by default. Firebase Spark plan: no Cloud Functions, no Blaze, no paid
+// services, therefore every guarantee below must be expressible in rules alone.
+//
+// HONEST LIMITATIONS (NOT solvable by rules on the Spark plan):
+//  * Students are UNAUTHENTICATED (Student ID only). Rules therefore cannot
+//    prove WHO submitted an attempt; a student can submit under another ID.
+//  * Scoring is client-side and NOT tamper-proof. Rules constrain the document
+//    SHAPE and lock the attempt once status == 'Completed', but a student can
+//    write any score on their first (Completing) write.
+//  * Correct answers are delivered to the browser to render the exam and are
+//    therefore discoverable by students.
+//  * `students/{id}` permits a public single-document get, so an attacker may
+//    probe IDs one at a time. Rules cannot rate-limit. Enable Firebase App
+//    Check if probing becomes a problem.
+//
+// WHAT THESE RULES DO GUARANTEE:
+//  * The roster cannot be listed or dumped by the public (list is admin-only).
+//  * Attempts and results are readable only by the administrator.
+//  * Attempt document IDs are pinned to the student + subject, so one student
+//    cannot create an unbounded number of attempt documents.
+//  * An attempt cannot be created over an existing document, and once
+//    'Completed' it cannot be edited by a student.
+//  * Every collection not listed below is denied.
+// ---------------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The single approved administrator. Mirrors window.cbtAdminEmail in
+    // firebase.config.js; keep both in sync.
+    function isAdmin() {
+      return request.auth != null &&
+             request.auth.token.email == 'abuhafs8007@gmail.com';
+    }
+
+    function isNonEmptyString(value) {
+      return value is string && value.size() > 0 && value.size() <= 300;
+    }
+
+    // Validates the attempt payload on creation. The document ID must match
+    // `id:<STUDENTID>__<subjectId>` exactly, which is what makes the ID
+    // deterministic and binds it to the declared student and subject.
+    function validNewAttempt(attemptId) {
+      let data = request.resource.data;
+      return isNonEmptyString(data.studentId)
+          && isNonEmptyString(data.subjectId)
+          && data.keys().hasOnly([
+               'id', 'studentKey', 'studentName', 'studentId', 'name',
+               'class', 'className', 'subject', 'subjectId', 'subjectName',
+               'score', 'percentage', 'totalQuestions', 'answeredCount',
+               'unansweredCount', 'status', 'timeUsed', 'timestamp',
+               'dateStarted', 'dateCompleted', 'durationMinutes'])
+          && attemptId == ('id:' + data.studentId.toUpperCase() + '__' + data.subjectId)
+          && data.id == attemptId
+          && data.status in ['In Progress', 'Completed'];
+    }
+
+    // A student (unauthenticated) may only update an attempt that is still
+    // 'In Progress', and may not re-point it at a different student or subject.
+    // Admins may always update (score correction, finalising, editing).
+    function validAttemptUpdate() {
+      let data = request.resource.data;
+      return data.studentId == resource.data.studentId
+          && data.subjectId == resource.data.subjectId
+          && data.id == resource.data.id;
+    }
+
+    // The status marker holds ONLY the three identity/status fields. Adding any
+    // other field (name, class, score, answers) is rejected, so a student cannot
+    // use this public collection to smuggle in or read private data.
+    function validStatusMarker(attemptId) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['studentId', 'subjectId', 'status'])
+          && isNonEmptyString(data.studentId)
+          && isNonEmptyString(data.subjectId)
+          && data.status in ['In Progress', 'Completed']
+          && attemptId == ('id:' + data.studentId.toUpperCase() + '__' + data.subjectId);
+    }
+
+// Least-privilege Firestore rules for the Arabic CBT platform.
+// Deny by default. Firebase Spark (no Cloud Functions, no Blaze).
+//
+// HONEST LIMITATIONS (cannot be solved by rules alone on Spark):
+//  * Students are UNAUTHENTICATED (Student ID only). Rules therefore cannot
+//    prove WHO submitted an attempt; a student could submit under another ID.
+//  * Scoring is client-side and NOT tamper-proof; a student controls the
+//    score/answers they write. Rules only constrain the SHAPE and block edits
+//    after an attempt is marked Completed.
+//  * Correct answers are delivered to the browser to render the exam and are
+//    therefore discoverable by students (documented, accepted risk).
+// What rules DO guarantee: the roster cannot be listed by the public, admin
+// results/attempts are admin-only, and completed attempts cannot be edited
+// by students.
+
+    // --- Student roster ------------------------------------------------------
+    // get:  anyone may read ONE document by exact ID (verifies an ID they
+    //       already typed; cannot be turned into a roster dump).
+    // list: admin-only -> the roster cannot be enumerated by students.
+    match /students/{studentId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // --- Questions + options -------------------------------------------------
+    // World-readable by design: the exam must receive the options AND the
+    // correct answer index to grade in the browser. This is the documented,
+    // accepted "answers are discoverable" risk. Writes are admin-only.
+    match /questions/{subjectId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- Subjects / exam configuration ---------------------------------------
+    // Students need isEnabled, durationMinutes and timers to run the exam.
+    match /subjects/{subjectId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- Platform settings ---------------------------------------------------
+    // Non-sensitive branding and grading thresholds used by the student UI.
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- Non-sensitive metadata ---------------------------------------------
+    // Only holds the list of removed subject IDs.
+    match /meta/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- Attempts (also the single source for the admin Results view) --------
+    // read:    admin-only. Students never read results back, and the full
+    //          attempt payload (names, class, score) must stay private.
+    // create:  only when the document does not already exist (prevents
+    //          overwriting an existing attempt), the payload shape is exactly
+    //          right, and the ID is the deterministic ID for the declared
+    //          student + subject.
+    // update:  admin always; a student only while status != 'Completed', and
+    //          never changing the student/subject identity. Once the stored
+    //          status is 'Completed' the document is locked for students.
+    // delete:  admin-only.
+    match /attempts/{attemptId} {
+      allow read: if isAdmin();
+      allow create: if !exists(/databases/$(database)/documents/attempts/$(attemptId))
+                    && validNewAttempt(attemptId);
+      allow update: if isAdmin()
+                    || (resource.data.status != 'Completed'
+                        && validAttemptUpdate()
+                        && request.resource.data.status in ['In Progress', 'Completed']);
+      allow delete: if isAdmin();
+    }
+
+    // --- Attempt status markers ---------------------------------------------
+    // A deliberately minimal, PUBLIC-by-exact-ID projection of an attempt. It
+    // exists so a student can learn whether they already have an attempt for a
+    // subject (to resume, or to be told "you already completed this exam")
+    // WITHOUT being able to read the real attempt document.
+    //
+    // It carries no name, no class and no score, so reading it exposes only
+    // whether a guessed student+subject pair has been attempted. `list` stays
+    // denied, so it cannot be enumerated.
+    //
+    // The authoritative anti-retake guarantee is the deterministic attempt ID
+    // plus `!exists()` on create above; this marker is UX, not the boundary.
+    match /attemptStatus/{attemptId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if validStatusMarker(attemptId);
+      allow update: if validStatusMarker(attemptId);
+      allow delete: if isAdmin();
+    }
+  }
+}
+

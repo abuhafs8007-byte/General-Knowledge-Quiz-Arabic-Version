@@ -1633,7 +1633,25 @@ const defaultCbtSettings = {
     examInstructions: 'اقرأ الأسئلة جيداً، واختر إجابة واحدة لكل سؤال.'
 };
 
+// ---------------------------------------------------------------------------
+// Storage policy
+// ---------------------------------------------------------------------------
+// Firestore (via window.cbtBackend) is the AUTHORITATIVE store for exam data
+// and submissions. localStorage is kept ONLY as a non-authoritative cache for
+// the world-readable collections (subjects, questions, settings), so the UI can
+// paint immediately while the online load completes.
+//
+// 'students', 'attempts' and 'results' are deliberately NOT stored locally:
+// caching the roster in localStorage would let a student read the whole roster,
+// and caching attempts would make results available offline. Both would defeat
+// the Firestore rules. Calls for those keys are silently ignored.
+//
+// Offline submissions are not supported: if the backend is unreachable, the
+// exam is blocked rather than silently accepted.
+const LOCAL_CACHE_ONLY_KEYS = new Set(['subjects', 'questions', 'settings', 'removedSubjects']);
+
 function loadCbtData(key, fallback) {
+    if (!LOCAL_CACHE_ONLY_KEYS.has(key)) return fallback;
     try {
         const savedValue = localStorage.getItem(CBT_STORAGE_KEYS[key]);
         return savedValue ? JSON.parse(savedValue) : fallback;
@@ -1644,6 +1662,7 @@ function loadCbtData(key, fallback) {
 }
 
 function saveCbtData(key, value) {
+    if (!LOCAL_CACHE_ONLY_KEYS.has(key)) return true;
     try {
         localStorage.setItem(CBT_STORAGE_KEYS[key], JSON.stringify(value));
         return true;
@@ -1661,14 +1680,16 @@ const sampleStudents = [
     { id: 'JSS2-004', name: 'Fatimah Bello', className: 'JSS 2', studentId: 'JSS2-004' }
 ];
 
-let cbtStudents = loadCbtData('students', sampleStudents);
+// Initial state. Students, attempts and results start EMPTY and are filled
+// from Firestore: they must never be seeded from (or cached to) localStorage.
+let cbtStudents = loadCbtData('students', []);
 let cbtSubjects = loadCbtData('subjects', null);
 let cbtAttempts = loadCbtData('attempts', []);
 let cbtResults = loadCbtData('results', []);
 let cbtSettings = { ...defaultCbtSettings, ...loadCbtData('settings', {}) };
 let cbtRemovedSubjects = loadCbtData('removedSubjects', []);
 
-if (!Array.isArray(cbtStudents)) cbtStudents = sampleStudents.slice();
+if (!Array.isArray(cbtStudents)) cbtStudents = [];
 if (!Array.isArray(cbtAttempts)) cbtAttempts = [];
 if (!Array.isArray(cbtResults)) cbtResults = [];
 if (!Array.isArray(cbtRemovedSubjects)) cbtRemovedSubjects = [];
@@ -1740,9 +1761,81 @@ if (savedQuestions && typeof savedQuestions === 'object') {
     });
 }
 
-saveCbtData('students', cbtStudents);
+// Only the world-readable collections are cached locally. 'students',
+// 'attempts' and 'results' are intentionally NOT written here.
 saveCbtData('subjects', cbtSubjects);
 saveCbtData('settings', cbtSettings);
+
+// ---------------------------------------------------------------------------
+// Firestore bootstrap
+// ---------------------------------------------------------------------------
+// Exams and the admin dashboard stay disabled until Firebase has initialized
+// AND the online data load has finished. Nothing here writes to Firestore, so a
+// student can never seed or overwrite data just by opening the page.
+//
+// cbtDataReady flips to true only on a successful online load; every exam gate
+// checks it. cbtDataError holds the message shown to the user when the load
+// fails (unconfigured project, offline, or a rules denial).
+let cbtDataReady = false;
+let cbtDataError = '';
+
+function applyLoadedExamConfig(config) {
+    if (config.settings && typeof config.settings === 'object') {
+        cbtSettings = { ...defaultCbtSettings, ...config.settings };
+        saveCbtData('settings', cbtSettings);
+    }
+    if (Array.isArray(config.removedSubjects)) {
+        cbtRemovedSubjects = config.removedSubjects.slice();
+    }
+    if (Array.isArray(config.subjects) && config.subjects.length) {
+        cbtSubjects = config.subjects.map(subject => ({
+            ...subject,
+            durationMinutes: Number(subject.durationMinutes) || Number(cbtSettings.defaultDuration) || 30,
+            timers: subject && typeof subject.timers === 'object' ? subject.timers : {},
+            isEnabled: Boolean(subject.isEnabled),
+            instructions: subject && subject.instructions ? subject.instructions : cbtSettings.examInstructions
+        }));
+        saveCbtData('subjects', cbtSubjects);
+    }
+    if (config.questions && typeof config.questions === 'object') {
+        Object.entries(config.questions).forEach(([subjectId, levels]) => {
+            if (!quizData[subjectId]) quizData[subjectId] = {};
+            ['easy', 'medium', 'hard'].forEach(level => {
+                if (Array.isArray(levels[level])) quizData[subjectId][level] = levels[level];
+            });
+        });
+        saveCbtData('questions', quizData);
+    }
+}
+
+async function bootstrapCbtData() {
+    const backend = window.cbtBackend;
+    if (!backend) {
+        cbtDataError = 'Firebase did not load. Check that firebase.config.js and firebase.js are reachable.';
+        return false;
+    }
+
+    const ready = await backend.whenReady();
+    if (!ready) {
+        cbtDataError = backend.stateError || 'Firebase is not available.';
+        return false;
+    }
+
+    try {
+        const config = await backend.loadExamConfig();
+        applyLoadedExamConfig(config);
+        cbtDataReady = true;
+        cbtDataError = '';
+        return true;
+    } catch (error) {
+        cbtDataError = backend.stateError || 'Unable to load exam data. Check your internet connection.';
+        console.error('[cbt] exam data load failed', error);
+        return false;
+    }
+}
+
+// Kick off the load immediately; callers await cbtDataLoaded.
+const cbtDataLoaded = bootstrapCbtData();
 
 function normalizeStudentId(studentId) {
     return String(studentId || '').trim().toUpperCase();
@@ -1775,75 +1868,12 @@ function getDifficultyForClass(className) {
     return { JSS1: 'easy', JSS2: 'medium', JSS3: 'hard' }[normalizedClass] || '';
 }
 
-function migrateLegacyScores() {
-    try {
-        if (localStorage.getItem(CBT_STORAGE_KEYS.legacyMigration) === 'true') return;
-        const oldScoreKeys = [];
-        for (let index = 0; index < localStorage.length; index++) {
-            const key = localStorage.key(index);
-            if (key && key.startsWith('quiz_score_')) oldScoreKeys.push(key);
-        }
-
-        oldScoreKeys.forEach(key => {
-            let oldScore;
-            try {
-                oldScore = JSON.parse(localStorage.getItem(key));
-            } catch (error) {
-                console.error(`Unable to migrate old score ${key}.`, error);
-                return;
-            }
-            if (!oldScore || !oldScore.name || !oldScore.subject || !oldScore.class) return;
-            const id = `legacy-${key}`;
-            if (cbtResults.some(result => result.id === id) || cbtAttempts.some(attempt => attempt.id === id)) return;
-            const className = String(oldScore.class);
-            const normalizedName = String(oldScore.name).trim().toLowerCase().replace(/\s+/g, ' ');
-            const matchingStudents = cbtStudents.filter(student =>
-                String(student.name || '').trim().toLowerCase().replace(/\s+/g, ' ') === normalizedName &&
-                String(student.className || '').replace(/\s+/g, '').toLowerCase() === className.replace(/\s+/g, '').toLowerCase()
-            );
-            const migratedStudent = matchingStudents.length === 1 ? matchingStudents[0] : null;
-            const migratedStudentId = String(oldScore.studentId || (migratedStudent && (migratedStudent.studentId || migratedStudent.id)) || '');
-            const studentKey = migratedStudentId ? getStudentKey(migratedStudentId) : `legacy:${id}`;
-            const subjectId = String(oldScore.subject);
-            const subject = getSubjectSettings(subjectId);
-            const score = Number(oldScore.score) || 0;
-            const totalQuestions = Number(oldScore.totalQuestions) || 0;
-            const timestamp = oldScore.timestamp || new Date().toISOString();
-            const legacyRecord = {
-                id,
-                studentKey,
-                studentName: String(oldScore.name),
-                studentId: migratedStudentId,
-                name: String(oldScore.name),
-                class: className,
-                className,
-                subject: subject ? subject.name : subjectId,
-                subjectId,
-                score,
-                totalQuestions,
-                percentage: Number(oldScore.percentage) || (totalQuestions ? Math.round(score / totalQuestions * 100) : 0),
-                answeredCount: Number(oldScore.answeredCount) || 0,
-                unansweredCount: Number(oldScore.unansweredCount) || 0,
-                status: 'Completed',
-                timeUsed: '--',
-                timestamp,
-                dateCompleted: timestamp
-            };
-            cbtAttempts.push(legacyRecord);
-            cbtResults.push(legacyRecord);
-        });
-
-        if (saveCbtData('attempts', cbtAttempts) && saveCbtData('results', cbtResults)) {
-            localStorage.setItem(CBT_STORAGE_KEYS.legacyMigration, 'true');
-        }
-    } catch (error) {
-        console.error('Unable to migrate previous locally saved quiz results.', error);
-    }
-}
-
-migrateLegacyScores();
-saveCbtData('attempts', cbtAttempts);
-saveCbtData('results', cbtResults);
+// NOTE: the previous `migrateLegacyScores()` helper has been removed.
+// localStorage is no longer an authoritative store for attempts or results, so
+// migrating old local scores into the client arrays would produce records that
+// can never be persisted to Firestore (and could not be trusted anyway, since
+// they were never validated by the security rules). Historical results, if any,
+// must be re-entered or imported by the administrator through the admin panel.
 
 function getSubjectSettings(subjectId) {
     return cbtSubjects.find(subject => subject.id === subjectId);
@@ -1877,7 +1907,19 @@ function getClassSubjectTimer(subjectId, className) {
     return Number(cbtSettings.defaultDuration) || 30;
 }
 
-function persistInProgressAttempt() {
+// Serializes attempt writes. Without this, an in-flight 'In Progress' autosave
+// could land AFTER the final 'Completed' write and revert the attempt's status,
+// which would make a finished exam look unfinished (and re-openable).
+let attemptWriteChain = Promise.resolve();
+
+function queueAttemptWrite(attempt) {
+    const next = attemptWriteChain.then(() => window.cbtBackend.writeAttempt(attempt));
+    // Keep the chain alive after a failure so later writes still run.
+    attemptWriteChain = next.catch(() => { });
+    return next;
+}
+
+async function persistInProgressAttempt() {
     if (!examStarted || examSubmitted || !selectedTopic || !currentAttemptId) return;
     const totalQuestions = Array.isArray(currentQuiz) ? currentQuiz.length : 0;
     const answeredCount = selectedAnswers.filter(answer => answer !== null && answer !== undefined).length;
@@ -1931,8 +1973,15 @@ function persistInProgressAttempt() {
 
     cbtAttempts = cbtAttempts.filter(entry => entry.id !== currentAttemptId).concat(updatedAttempt);
     cbtResults = cbtResults.filter(result => result.id !== currentAttemptId).concat(updatedAttempt);
-    saveCbtData('attempts', cbtAttempts);
-    saveCbtData('results', cbtResults);
+    // Best-effort autosave of the in-progress state. The authoritative record is
+    // the final 'Completed' write in saveCompletedAttempt; if this autosave fails
+    // (e.g. the connection dropped) the exam keeps running and the student is
+    // told at submit time if the final write also fails.
+    try {
+        await queueAttemptWrite(updatedAttempt);
+    } catch (error) {
+        console.warn('[cbt] in-progress autosave failed', error);
+    }
 }
 
 function refreshCbtBranding() {
@@ -1957,6 +2006,7 @@ window.cbtApp = {
     set settings(value) { cbtSettings = value; saveCbtData('settings', cbtSettings); },
     questions: quizData,
     topicNames,
+    sampleStudents,
     save(key) { return saveCbtData(key, this[key]); },
     saveQuestions() { return saveCbtData('questions', quizData); },
     refreshStudentSubjects,
@@ -2051,9 +2101,9 @@ studentIdInput.addEventListener('input', () => {
     refreshStudentSubjects();
 });
 
-function verifyStudentId() {
+async function verifyStudentId() {
     const enteredId = studentIdInput.value.trim();
-    if (!enteredId) {
+    const reject = (message) => {
         studentVerified = false;
         studentName = '';
         currentStudentId = '';
@@ -2061,45 +2111,39 @@ function verifyStudentId() {
         currentStudentClass = '';
         selectedTopic = '';
         selectedTopicDisplay.textContent = '';
-        studentLoginMessage.textContent = 'Please enter your Student ID.';
+        studentLoginMessage.textContent = message;
         verifiedStudentSummary.hidden = true;
         studentExamOptions.hidden = true;
         refreshStudentSubjects();
         return false;
-    }
+    };
 
-    const student = findRegisteredStudent(enteredId);
+    if (!enteredId) return reject('Please enter your Student ID.');
+
+    // Never verify against data that has not been loaded from Firestore.
+    await cbtDataLoaded;
+    if (!cbtDataReady) return reject(cbtDataError || 'Exam data is not available yet. Please check your connection.');
+
+    // Narrowly scoped lookup: one document read by exact ID. The roster itself is
+    // never fetched or listed here, so this cannot be used to enumerate students.
+    let student = null;
+    try {
+        student = await window.cbtBackend.verifyStudent(enteredId);
+    } catch (error) {
+        console.error('[cbt] Student ID verification failed', error);
+        return reject(cbtDataError || 'Could not verify your Student ID. Check your connection and try again.');
+    }
     if (!student) {
-        studentVerified = false;
-        studentName = '';
-        currentStudentId = '';
-        currentStudentKey = '';
-        currentStudentClass = '';
-        selectedTopic = '';
-        selectedTopicDisplay.textContent = '';
-        studentLoginMessage.textContent = 'Invalid Student ID. Please enter a registered Student ID.';
-        verifiedStudentSummary.hidden = true;
-        studentExamOptions.hidden = true;
-        refreshStudentSubjects();
-        return false;
+        cbtStudents = [];
+        return reject('Invalid Student ID. Please enter a registered Student ID.');
     }
 
     const difficulty = getDifficultyForClass(student.className);
-    if (!difficulty) {
-        studentVerified = false;
-        studentName = '';
-        currentStudentId = '';
-        currentStudentKey = '';
-        currentStudentClass = '';
-        selectedTopic = '';
-        selectedTopicDisplay.textContent = '';
-        studentLoginMessage.textContent = 'The registered class is not supported for examinations.';
-        verifiedStudentSummary.hidden = true;
-        studentExamOptions.hidden = true;
-        refreshStudentSubjects();
-        return false;
-    }
+    if (!difficulty) return reject('The registered class is not supported for examinations.');
 
+    // Hold ONLY this student's own record. The full roster stays out of the
+    // client entirely.
+    cbtStudents = [student];
     studentName = String(student.name || '').trim();
     currentStudentId = String(student.studentId || student.id).trim();
     currentStudentClass = String(student.className || '').trim();
@@ -2574,10 +2618,37 @@ const antiCheatSystem = {
     }
 };
 
+/**
+ * Click wrapper for startQuiz.
+ *
+ * Disables the Start button for the whole (now asynchronous) start sequence so a
+ * double click cannot create two attempt documents, and always re-enables it if
+ * the exam did not actually begin.
+ */
 function startQuiz() {
+    if (examStarted || examSubmitted || startBtn.disabled) return;
+    startBtn.disabled = true;
+    Promise.resolve()
+        .then(runStartQuiz)
+        .catch(error => {
+            console.error('[cbt] exam start failed', error);
+            alert('تعذر بدء الاختبار. يرجى المحاولة مرة أخرى.');
+        })
+        .then(() => {
+            // Keep the button disabled while the exam screen is showing.
+            if (!examStarted) startBtn.disabled = false;
+        });
+}
 
-    if (examStarted || examSubmitted) return;
+async function runStartQuiz() {
     antiCheatSystem.reset();
+    // The exam cannot start until Firestore is initialized and the online data
+    // load succeeded. This is the single gate that keeps the platform online-only.
+    if (!cbtDataReady) {
+        alert(cbtDataError || 'Exam data is still loading. Please wait a moment and try again.');
+        return;
+    }
+
     const registeredStudent = studentVerified && normalizeStudentId(studentIdInput.value) === normalizeStudentId(currentStudentId)
         ? findRegisteredStudent(currentStudentId)
         : null;
@@ -2615,31 +2686,65 @@ function startQuiz() {
     }
 
     const classLevel = currentStudentClass;
-    const completedAttempt = findStudentSubjectAttempt(cbtAttempts, currentStudentId, selectedTopic, 'Completed');
-    if (completedAttempt) {
+
+    // Ask Firestore (via the public status marker) whether this student already
+    // has an attempt for this subject. This is the authoritative check: the local
+    // arrays start empty, so a page reload cannot be used to retake an exam.
+    let existingStatus = null;
+    try {
+        existingStatus = await window.cbtBackend.readAttemptStatus(currentStudentId, selectedTopic);
+    } catch (error) {
+        console.error('[cbt] could not read the attempt status', error);
+        alert('تعذر التحقق من محاولاتك السابقة. تحقق من اتصال الإنترنت وحاول مرة أخرى.');
+        return;
+    }
+
+    if (existingStatus && existingStatus.status === 'Completed') {
         alert('You have already completed this examination. لقد أكملت هذا الامتحان من قبل.');
         return;
     }
 
-    const interruptedAttempt = cbtAttempts.find(attempt =>
-        attempt.subjectId === selectedTopic &&
-        (normalizeStudentId(attempt.studentId) === normalizeStudentId(currentStudentId) || attempt.studentKey === currentStudentKey) &&
-        attempt.status === 'In Progress'
-    );
-    if (interruptedAttempt) {
-        const nextAttempt = {
-            ...interruptedAttempt,
+    const localCompletedAttempt = findStudentSubjectAttempt(cbtAttempts, currentStudentId, selectedTopic, 'Completed');
+    if (localCompletedAttempt) {
+        alert('You have already completed this examination. لقد أكملت هذا الامتحان من قبل.');
+        return;
+    }
+
+    // An attempt left 'In Progress' on the server cannot be resumed safely: the
+    // questions and timer live only in this browser. Finalize it so it counts,
+    // and do not allow a retake.
+    if (existingStatus && existingStatus.status === 'In Progress') {
+        const staleAttemptId = window.cbtBackend.buildAttemptId(currentStudentId, selectedTopic);
+        const staleAttempt = cbtAttempts.find(entry => entry.id === staleAttemptId) || {
+            id: staleAttemptId,
+            studentKey: currentStudentKey,
+            studentName,
+            studentId: currentStudentId,
+            className: classLevel,
+            class: classLevel,
+            subjectId: selectedTopic,
+            subject: subjectSettings.name,
+            subjectName: subjectSettings.name,
+            totalQuestions: 0,
+            status: 'In Progress',
+            dateStarted: new Date().toISOString()
+        };
+        const finalizedAttempt = {
+            ...staleAttempt,
             status: 'Completed',
-            percentage: Number(interruptedAttempt.percentage) || 0,
-            score: Number(interruptedAttempt.score) || 0,
-            timeUsed: interruptedAttempt.timeUsed || '00:00',
+            score: Number(staleAttempt.score) || 0,
+            percentage: Number(staleAttempt.percentage) || 0,
+            timeUsed: staleAttempt.timeUsed || '00:00',
             dateCompleted: new Date().toISOString(),
             timestamp: new Date().toISOString()
         };
-        cbtAttempts = cbtAttempts.map(attempt => attempt.id === interruptedAttempt.id ? nextAttempt : attempt);
-        cbtResults = cbtResults.filter(result => result.id !== interruptedAttempt.id).concat(nextAttempt);
-        saveCbtData('attempts', cbtAttempts);
-        saveCbtData('results', cbtResults);
+        cbtAttempts = cbtAttempts.filter(attempt => attempt.id !== staleAttemptId).concat(finalizedAttempt);
+        cbtResults = cbtResults.filter(result => result.id !== staleAttemptId).concat(finalizedAttempt);
+        try {
+            await queueAttemptWrite(finalizedAttempt);
+        } catch (error) {
+            console.error('[cbt] could not finalize the interrupted attempt', error);
+        }
         alert('A previous attempt for this exam was interrupted and has already been finalized. You cannot retake it.');
         return;
     }
@@ -2697,18 +2802,19 @@ function startQuiz() {
 
     const subjectTimerMinutes = getClassSubjectTimer(selectedTopic, currentStudentClass);
     timeRemaining = Math.max(1, Number(subjectTimerMinutes) || cbtSettings.defaultDuration) * 60;
-    const previousPendingAttempt = findStudentSubjectAttempt(cbtAttempts, currentStudentId, selectedTopic, 'In Progress');
-    currentAttemptId = previousPendingAttempt
-        ? previousPendingAttempt.id
-        : `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // Deterministic ID: one attempt document per student + subject. This is what
+    // lets the rules block a duplicate create and lock the attempt once done.
+    currentAttemptId = window.cbtBackend.buildAttemptId(currentStudentId, selectedTopic);
     const pendingAttempt = {
-        ...(previousPendingAttempt || {}),
         id: currentAttemptId,
         studentKey: currentStudentKey,
         studentName,
         studentId: currentStudentId,
+        name: studentName,
         className: classLevel,
+        class: classLevel,
         subjectId: selectedTopic,
+        subject: subjectSettings.name,
         subjectName: subjectSettings.name,
         status: 'In Progress',
         score: 0,
@@ -2721,10 +2827,21 @@ function startQuiz() {
     };
     cbtAttempts = cbtAttempts.filter(attempt => attempt.id !== currentAttemptId).concat(pendingAttempt);
     cbtResults = cbtResults.filter(result => result.id !== currentAttemptId).concat(pendingAttempt);
-    const attemptSaved = saveCbtData('attempts', cbtAttempts);
-    const resultSaved = saveCbtData('results', cbtResults);
-    if (!attemptSaved || !resultSaved) {
-        alert('تعذر حفظ محاولة الاختبار على هذا الجهاز. يرجى التحقق من مساحة التخزين.');
+    // Firestore is the authoritative store. A failed write means we cannot record
+    // the attempt, so the exam must NOT start (no offline submission).
+    let attemptPersisted = false;
+    try {
+        await queueAttemptWrite(pendingAttempt);
+        attemptPersisted = true;
+    } catch (error) {
+        console.error('[cbt] could not persist the attempt to Firestore', error);
+        cbtDataReady = false;
+        alert(cbtDataError || 'تعذر حفظ محاولة الاختبار. تحقق من اتصال الإنترنت وحاول مرة أخرى.');
+    }
+    if (!attemptPersisted) {
+        cbtAttempts = cbtAttempts.filter(attempt => attempt.id !== currentAttemptId);
+        cbtResults = cbtResults.filter(result => result.id !== currentAttemptId);
+        currentAttemptId = '';
         return;
     }
     examStarted = true;
@@ -2916,10 +3033,13 @@ async function finishQuiz() {
     examStarted = false;
 
     calculateScore();
-    const resultSaved = saveCompletedAttempt(studentName, score, currentStudentClass, currentQuiz.length);
+    // Await the Firestore write so the student is told the truth about whether
+    // their result was actually recorded. A failed write is reported as a
+    // failure, never as a silent success.
+    const resultSaved = await saveCompletedAttempt(studentName, score, currentStudentClass, currentQuiz.length);
     document.getElementById('saveStatus').textContent = resultSaved
-        ? (cbtSettings.allowResults ? 'تم حفظ النتيجة على هذا الجهاز.' : 'تم حفظ النتيجة، وسيتم إعلانها من إدارة المدرسة.')
-        : 'تعذر حفظ النتيجة على هذا الجهاز. يرجى إبلاغ مسؤول الاختبار.';
+        ? (cbtSettings.allowResults ? 'تم حفظ النتيجة بنجاح.' : 'تم حفظ النتيجة، وسيتم إعلانها من إدارة المدرسة.')
+        : 'تعذر حفظ النتيجة. تحقق من اتصال الإنترنت وأبلغ مسؤول الاختبار فوراً.';
     restartBtn.disabled = false;
     resultsScreen.classList.toggle('results-hidden', !cbtSettings.allowResults);
     showScreen('results');
@@ -3019,7 +3139,7 @@ function calculateScore() {
     }, 100);
 }
 
-function saveCompletedAttempt(name, score, classLevel, totalQuestions) {
+async function saveCompletedAttempt(name, score, classLevel, totalQuestions) {
     const answeredCount = selectedAnswers.filter(answer => answer !== null && answer !== undefined).length;
     const timeTaken = Math.floor((Date.now() - startTime) / 1000);
     const timeUsed = `${String(Math.floor(timeTaken / 60)).padStart(2, '0')}:${String(timeTaken % 60).padStart(2, '0')}`;
@@ -3034,6 +3154,7 @@ function saveCompletedAttempt(name, score, classLevel, totalQuestions) {
         className: classLevel,
         subject: subjectSettings ? subjectSettings.name : selectedTopic,
         subjectId: selectedTopic,
+        subjectName: subjectSettings ? subjectSettings.name : selectedTopic,
         score,
         percentage: Math.round((score / totalQuestions) * 100),
         totalQuestions,
@@ -3048,9 +3169,17 @@ function saveCompletedAttempt(name, score, classLevel, totalQuestions) {
         ? { ...attempt, ...scoreData, dateCompleted: scoreData.timestamp }
         : attempt);
     cbtResults = cbtResults.filter(result => result.id !== currentAttemptId).concat(scoreData);
-    const attemptSaved = saveCbtData('attempts', cbtAttempts);
-    const resultSaved = saveCbtData('results', cbtResults);
-    return attemptSaved && resultSaved;
+
+    // Firestore is authoritative. Scoring is client-side (documented, accepted
+    // risk); what the rules guarantee is that once this write lands with status
+    // 'Completed' the student can never edit it again.
+    try {
+        await queueAttemptWrite({ ...scoreData, dateCompleted: scoreData.timestamp });
+        return true;
+    } catch (error) {
+        console.error('[cbt] could not save the completed attempt to Firestore', error);
+        return false;
+    }
 }
 
 function quitQuiz() {

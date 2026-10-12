@@ -256,6 +256,15 @@
     <audio id="passSound" src="Successes.mp3"></audio>
     <audio id="failSound" src="Failure.mp3"></audio>
 
+    <!--
+      Firebase bootstrap. firebase.config.js holds the Web app values (edit it),
+      firebase.js is an ES module that initializes Firebase and exposes the
+      window.cbtBackend data-access adapter. Both must load BEFORE script.js and
+      admin.js so window.cbtBackend exists when those files run.
+    -->
+    <script src="firebase.config.js"></script>
+    <script type="module" src="firebase.js"></script>
+
     <script src="failEffect.js" defer></script>
     <script src="script.js" defer></script>
     <script src="admin.js" defer></script>
