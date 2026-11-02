@@ -41,6 +41,22 @@ service cloud.firestore {
       return value is string && value.size() > 0 && value.size() <= 300;
     }
 
+    function registeredClassMatches(recordedClass, attemptClass) {
+      return (attemptClass == 'JSS 1' && recordedClass in ['JSS 1', 'JSS1', 'jss 1', 'jss1', 'Jss 1', 'Jss1'])
+          || (attemptClass == 'JSS 2' && recordedClass in ['JSS 2', 'JSS2', 'jss 2', 'jss2', 'Jss 2', 'Jss2'])
+          || (attemptClass == 'JSS 3' && recordedClass in ['JSS 3', 'JSS3', 'jss 3', 'jss3', 'Jss 3', 'Jss3'])
+          || (attemptClass == 'SS 1' && recordedClass in ['SS 1', 'SS1', 'ss 1', 'ss1', 'Ss 1', 'Ss1'])
+          || (attemptClass == 'SS 2' && recordedClass in ['SS 2', 'SS2', 'ss 2', 'ss2', 'Ss 2', 'Ss2'])
+          || (attemptClass == 'SS 3' && recordedClass in ['SS 3', 'SS3', 'ss 3', 'ss3', 'Ss 3', 'Ss3']);
+    }
+
+    function classMatchesStudent(studentId, attemptClass) {
+      let studentPath = /databases/$(database)/documents/students/$(studentId);
+      return attemptClass in ['JSS 1', 'JSS 2', 'JSS 3', 'SS 1', 'SS 2', 'SS 3']
+          && exists(studentPath)
+          && registeredClassMatches(get(studentPath).data.className, attemptClass);
+    }
+
     // Validates the attempt payload on creation. The document ID must match
     // `id:<STUDENTID>__<subjectId>` exactly, which is what makes the ID
     // deterministic and binds it to the declared student and subject.
@@ -54,8 +70,10 @@ service cloud.firestore {
                'score', 'percentage', 'totalQuestions', 'answeredCount',
                'unansweredCount', 'status', 'timeUsed', 'timestamp',
                'dateStarted', 'dateCompleted', 'durationMinutes'])
-          && attemptId == ('id:' + data.studentId.toUpperCase() + '__' + data.subjectId)
+          && attemptId == ('id:' + data.studentId + '__' + data.subjectId)
           && data.id == attemptId
+          && data.className == data.class
+          && classMatchesStudent(data.studentId, data.className)
           && data.status in ['In Progress', 'Completed'];
     }
 
@@ -66,7 +84,9 @@ service cloud.firestore {
       let data = request.resource.data;
       return data.studentId == resource.data.studentId
           && data.subjectId == resource.data.subjectId
-          && data.id == resource.data.id;
+          && data.id == resource.data.id
+          && data.className == data.class
+          && classMatchesStudent(data.studentId, data.className);
     }
 
     // The status marker holds ONLY the three identity/status fields. Adding any
@@ -78,7 +98,8 @@ service cloud.firestore {
           && isNonEmptyString(data.studentId)
           && isNonEmptyString(data.subjectId)
           && data.status in ['In Progress', 'Completed']
-          && attemptId == ('id:' + data.studentId.toUpperCase() + '__' + data.subjectId);
+          && exists(/databases/$(database)/documents/students/$(data.studentId))
+          && attemptId == ('id:' + data.studentId + '__' + data.subjectId);
     }
 
 // Least-privilege Firestore rules for the Arabic CBT platform.
@@ -179,4 +200,3 @@ service cloud.firestore {
     }
   }
 }
-

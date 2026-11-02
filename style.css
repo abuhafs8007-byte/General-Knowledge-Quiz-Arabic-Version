@@ -118,6 +118,61 @@ select:focus {
     box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.12);
 }
 
+.class-selection h2 {
+    margin-bottom: 6px;
+    font-size: 1.15rem;
+}
+
+.class-selection-section {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid rgba(102, 126, 234, 0.2);
+    border-radius: 10px;
+    background: rgba(102, 126, 234, 0.045);
+}
+
+.class-selection-section h3 {
+    margin-bottom: 10px;
+    color: #4c51bf;
+    font-size: 1rem;
+}
+
+.class-selection-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.class-selection-btn {
+    min-height: 46px;
+    padding: 10px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    color: #333;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s, color 0.2s;
+}
+
+.class-selection-btn:enabled:hover,
+.class-selection-btn.selected {
+    border-color: #667eea;
+    background: #667eea;
+    color: #fff;
+}
+
+.class-selection-btn:disabled:not(.selected) {
+    color: #777;
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.class-selection .field-hint {
+    margin-top: 8px;
+}
+
 .difficulty-options {
     display: flex;
     gap: 10px;
@@ -1811,12 +1866,18 @@ input[type="radio"] + label {
         padding: 10px;
     }
 
-    .difficulty-options {
+    .class-selection-section {
+        margin-top: 10px;
+        padding: 10px;
+    }
+
+    .class-selection-options {
         gap: 6px;
     }
 
-    .difficulty-btn {
-        padding: 7px;
+    .class-selection-btn {
+        min-height: 42px;
+        padding: 7px 4px;
         font-size: 14px;
     }
 

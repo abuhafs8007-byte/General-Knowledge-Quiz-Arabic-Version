@@ -1632,6 +1632,26 @@ const defaultCbtSettings = {
     allowResults: true,
     examInstructions: 'اقرأ الأسئلة جيداً، واختر إجابة واحدة لكل سؤال.'
 };
+const supportedClasses = ['JSS 1', 'JSS 2', 'JSS 3', 'SS 1', 'SS 2', 'SS 3'];
+const questionBankLevels = ['easy', 'medium', 'hard', 'ss1', 'ss2', 'ss3'];
+
+function normalizeClassName(className) {
+    const compact = String(className || '').trim().replace(/\s+/g, '').toUpperCase();
+    const match = compact.match(/^(JSS|SS)([123])$/);
+    return match ? `${match[1]} ${match[2]}` : '';
+}
+
+function getQuestionBankLevel(className) {
+    const normalized = normalizeClassName(className);
+    return {
+        'JSS 1': 'easy',
+        'JSS 2': 'medium',
+        'JSS 3': 'hard',
+        'SS 1': 'ss1',
+        'SS 2': 'ss2',
+        'SS 3': 'ss3'
+    }[normalized] || '';
+}
 
 // ---------------------------------------------------------------------------
 // Storage policy
@@ -1800,7 +1820,7 @@ function applyLoadedExamConfig(config) {
     if (config.questions && typeof config.questions === 'object') {
         Object.entries(config.questions).forEach(([subjectId, levels]) => {
             if (!quizData[subjectId]) quizData[subjectId] = {};
-            ['easy', 'medium', 'hard'].forEach(level => {
+            questionBankLevels.forEach(level => {
                 if (Array.isArray(levels[level])) quizData[subjectId][level] = levels[level];
             });
         });
@@ -1864,8 +1884,7 @@ function findStudentSubjectAttempt(attempts, studentId, subjectId, status) {
 }
 
 function getDifficultyForClass(className) {
-    const normalizedClass = String(className || '').replace(/\s+/g, '').toUpperCase();
-    return { JSS1: 'easy', JSS2: 'medium', JSS3: 'hard' }[normalizedClass] || '';
+    return getQuestionBankLevel(className);
 }
 
 // NOTE: the previous `migrateLegacyScores()` helper has been removed.
@@ -1877,16 +1896,6 @@ function getDifficultyForClass(className) {
 
 function getSubjectSettings(subjectId) {
     return cbtSubjects.find(subject => subject.id === subjectId);
-}
-
-function normalizeClassName(className) {
-    const raw = String(className || '').trim().replace(/\s+/g, ' ');
-    if (!raw) return '';
-    const upper = raw.toUpperCase();
-    if (upper === 'JSS1' || upper === 'JSS 1') return 'JSS 1';
-    if (upper === 'JSS2' || upper === 'JSS 2') return 'JSS 2';
-    if (upper === 'JSS3' || upper === 'JSS 3') return 'JSS 3';
-    return raw;
 }
 
 function getClassSubjectTimer(subjectId, className) {
@@ -1903,6 +1912,7 @@ function getClassSubjectTimer(subjectId, className) {
         return Number(timers[fallbackKey]);
     }
 
+    if (normalizedClass.startsWith('SS ')) return 0;
     if (subject && Number.isFinite(Number(subject.durationMinutes))) return Number(subject.durationMinutes);
     return Number(cbtSettings.defaultDuration) || 30;
 }
@@ -2025,13 +2035,6 @@ function updateProgressBar(current, total) {
     }
 }
 
-const classMapping = {
-    easy: 'JSS 1',
-    medium: 'JSS 2',
-    hard: 'JSS 3'
-};
-
-
 // State
 let currentQuiz = [];
 let currentQuestion = 0;
@@ -2059,13 +2062,14 @@ const quizScreen = document.getElementById('quizScreen');
 const resultsScreen = document.getElementById('resultsScreen');
 
 const numQuestionsInput = document.getElementById('numQuestions');
-const difficultyBtns = document.querySelectorAll('.difficulty-btn');
 const topicGrid = document.querySelector('.topic-grid');
 const studentIdInput = document.getElementById('studentId');
 const studentLoginForm = document.getElementById('studentLoginForm');
 const studentLoginMessage = document.getElementById('studentLoginMessage');
 const studentExamOptions = document.getElementById('studentExamOptions');
 const verifiedStudentSummary = document.getElementById('verifiedStudentSummary');
+const classSelectionButtons = document.querySelectorAll('.class-selection-btn');
+const registeredClassMessage = document.getElementById('registeredClassMessage');
 const startBtn = document.getElementById('startbtn');
 const nextBtn = document.getElementById('nextBtn');
 const quitBtn = document.getElementById('quitBtn');
@@ -2095,6 +2099,7 @@ studentIdInput.addEventListener('input', () => {
     currentAttemptId = '';
     selectedTopic = '';
     selectedTopicDisplay.textContent = '';
+    updateClassSelection('');
     verifiedStudentSummary.hidden = true;
     studentExamOptions.hidden = true;
     studentLoginMessage.textContent = '';
@@ -2111,6 +2116,7 @@ async function verifyStudentId() {
         currentStudentClass = '';
         selectedTopic = '';
         selectedTopicDisplay.textContent = '';
+        updateClassSelection('');
         studentLoginMessage.textContent = message;
         verifiedStudentSummary.hidden = true;
         studentExamOptions.hidden = true;
@@ -2138,23 +2144,20 @@ async function verifyStudentId() {
         return reject('Invalid Student ID. Please enter a registered Student ID.');
     }
 
-    const difficulty = getDifficultyForClass(student.className);
+    const registeredClass = normalizeClassName(student.className);
+    const difficulty = getDifficultyForClass(registeredClass);
     if (!difficulty) return reject('The registered class is not supported for examinations.');
 
     // Hold ONLY this student's own record. The full roster stays out of the
     // client entirely.
-    cbtStudents = [student];
+    cbtStudents = [{ ...student, className: registeredClass }];
     studentName = String(student.name || '').trim();
     currentStudentId = String(student.studentId || student.id).trim();
-    currentStudentClass = String(student.className || '').trim();
+    currentStudentClass = registeredClass;
     currentStudentKey = getStudentKey(currentStudentId);
     selectedDifficulty = difficulty;
-    difficultyBtns.forEach(button => {
-        const selected = button.dataset.difficulty === selectedDifficulty;
-        button.classList.toggle('selected', selected);
-        button.setAttribute('aria-pressed', String(selected));
-    });
     studentVerified = true;
+    updateClassSelection(currentStudentClass);
     studentLoginMessage.textContent = '';
     verifiedStudentSummary.textContent = `${studentName} — ${currentStudentClass}`;
     verifiedStudentSummary.hidden = false;
@@ -2180,17 +2183,11 @@ topicGrid.addEventListener('click', event => {
     updateDurationPreview();
 });
 
-difficultyBtns.forEach(btn => {
+classSelectionButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-        difficultyBtns.forEach(b => {
-            b.classList.remove('selected');
-            b.setAttribute('aria-pressed', 'false');
-        });
-        btn.classList.add('selected');
-        btn.setAttribute('aria-pressed', 'true');
-        selectedDifficulty = btn.dataset.difficulty;
-        if (selectedTopic) selectedClassDisplay.textContent = classMapping[selectedDifficulty];
-        updateDurationPreview();
+        const registeredClass = normalizeClassName(currentStudentClass);
+        if (!studentVerified || normalizeClassName(btn.dataset.class) !== registeredClass) return;
+        updateClassSelection(registeredClass);
     });
 });
 
@@ -2228,12 +2225,13 @@ function refreshStudentSubjects() {
             currentStudentClass = '';
             selectedTopic = '';
             selectedTopicDisplay.textContent = '';
+            updateClassSelection('');
             studentExamOptions.hidden = true;
             verifiedStudentSummary.hidden = true;
             studentLoginMessage.textContent = 'Invalid Student ID. Please enter a registered Student ID.';
         } else {
             studentName = String(registeredStudent.name || '').trim();
-            currentStudentClass = String(registeredStudent.className || '').trim();
+            currentStudentClass = normalizeClassName(registeredStudent.className);
             selectedDifficulty = getDifficultyForClass(currentStudentClass);
             if (!selectedDifficulty) {
                 studentVerified = false;
@@ -2245,16 +2243,16 @@ function refreshStudentSubjects() {
                 selectedTopicDisplay.textContent = '';
                 studentExamOptions.hidden = true;
                 verifiedStudentSummary.hidden = true;
+                updateClassSelection('');
                 studentLoginMessage.textContent = 'The registered class is not supported for examinations.';
                 return;
             }
+            registeredStudent.className = currentStudentClass;
             verifiedStudentSummary.textContent = `${studentName} — ${currentStudentClass}`;
-            difficultyBtns.forEach(button => {
-                const selected = button.dataset.difficulty === selectedDifficulty;
-                button.classList.toggle('selected', selected);
-                button.setAttribute('aria-pressed', String(selected));
-            });
+            updateClassSelection(currentStudentClass);
         }
+    } else {
+        updateClassSelection('');
     }
     const subjectsById = new Map(cbtSubjects.map(subject => [subject.id, subject]));
     Array.from(topicGrid.querySelectorAll('.topic-btn')).forEach(button => {
@@ -2277,16 +2275,13 @@ function refreshStudentSubjects() {
         button.textContent = subject.name;
         const levelQuestions = quizData[subject.id] && quizData[subject.id][selectedDifficulty];
         const hasQuestions = Array.isArray(levelQuestions) && levelQuestions.length > 0;
-        button.disabled = !studentVerified || !subject.isEnabled || !hasQuestions;
+        const duration = getClassSubjectTimer(subject.id, currentStudentClass);
+        const hasDuration = Number.isFinite(Number(duration)) && Number(duration) > 0;
+        button.disabled = !studentVerified || !subject.isEnabled || !hasQuestions || !hasDuration;
         button.setAttribute('aria-pressed', String(subject.id === selectedTopic));
         button.classList.toggle('selected', subject.id === selectedTopic);
     });
 
-    difficultyBtns.forEach(button => {
-        const levelQuestions = selectedTopic && quizData[selectedTopic] && quizData[selectedTopic][button.dataset.difficulty];
-        const subject = selectedTopic && subjectsById.get(selectedTopic);
-        button.disabled = !studentVerified || !subject || !subject.isEnabled || !Array.isArray(levelQuestions) || levelQuestions.length === 0;
-    });
     if (selectedTopic) {
         const selectedSubject = subjectsById.get(selectedTopic);
         selectedTopicDisplay.textContent = selectedSubject ? selectedSubject.name : '';
@@ -2295,7 +2290,34 @@ function refreshStudentSubjects() {
         selectedTopicDisplay.textContent = '';
         document.getElementById('subjectInstructions').textContent = '';
     }
+    if (studentVerified && registeredClassMessage) {
+        const availableSubjectCount = cbtSubjects.filter(subject => {
+            const questions = quizData[subject.id] && quizData[subject.id][selectedDifficulty];
+            const duration = getClassSubjectTimer(subject.id, currentStudentClass);
+            return subject.isEnabled && Array.isArray(questions) && questions.length > 0 &&
+                Number.isFinite(Number(duration)) && Number(duration) > 0;
+        }).length;
+        if (availableSubjectCount === 0) {
+            registeredClassMessage.textContent = `صفك المسجل: ${currentStudentClass} — لا توجد حالياً مواد بأسئلة ومدة اختبار مخصصة لهذا الصف. يرجى التواصل مع الإدارة.`;
+        }
+    }
     updateDurationPreview();
+}
+
+function updateClassSelection(registeredClass) {
+    const normalizedClass = normalizeClassName(registeredClass);
+    classSelectionButtons.forEach(button => {
+        const isRegisteredClass = supportedClasses.includes(normalizedClass) &&
+            normalizeClassName(button.dataset.class) === normalizedClass;
+        button.disabled = !studentVerified || !normalizedClass || !isRegisteredClass;
+        button.classList.toggle('selected', isRegisteredClass && studentVerified);
+        button.setAttribute('aria-pressed', String(isRegisteredClass && studentVerified));
+    });
+    if (registeredClassMessage) {
+        registeredClassMessage.textContent = studentVerified && normalizedClass
+            ? `صفك المسجل: ${normalizedClass}`
+            : '';
+    }
 }
 
 refreshStudentSubjects();
@@ -2670,7 +2692,15 @@ async function runStartQuiz() {
     }
     studentName = String(registeredStudent.name || '').trim();
     currentStudentId = String(registeredStudent.studentId || registeredStudent.id).trim();
-    currentStudentClass = String(registeredStudent.className || '').trim();
+    currentStudentClass = normalizeClassName(registeredStudent.className);
+    selectedDifficulty = getQuestionBankLevel(currentStudentClass);
+    if (!selectedDifficulty) {
+        studentVerified = false;
+        studentExamOptions.hidden = true;
+        updateClassSelection('');
+        studentLoginMessage.textContent = 'The registered class is not supported for examinations.';
+        return;
+    }
     currentStudentKey = getStudentKey(currentStudentId);
 
     if (!selectedTopic) {
@@ -2682,6 +2712,11 @@ async function runStartQuiz() {
     if (!subjectSettings || !subjectSettings.isEnabled) {
         alert('THIS EXAM IS CURRENTLY DISABLED.');
         refreshStudentSubjects();
+        return;
+    }
+    const configuredDuration = getClassSubjectTimer(selectedTopic, currentStudentClass);
+    if (!Number.isFinite(Number(configuredDuration)) || Number(configuredDuration) < 1) {
+        alert('مدة الاختبار غير محددة لهذا الصف والمادة. يرجى التواصل مع الإدارة.');
         return;
     }
 
@@ -2852,7 +2887,7 @@ async function runStartQuiz() {
     antiCheatSystem.init(); // Initialize anti-cheat protection
     showScreen('quiz');
     quitBtn.disabled = false;
-    document.getElementById('toggleReviewBtn').disabled = true;
+    if (toggleReviewBtn) toggleReviewBtn.disabled = true;
     selectedClassDisplay.textContent = currentStudentClass;
     displayQuestion();
     document.getElementById('studentNameDisplay').textContent = studentName;
@@ -2904,7 +2939,7 @@ function displayQuestion() {
     questionSlider.max = currentQuiz.length;
 
     // Update class display
-    selectedClassDisplay.textContent = classMapping[selectedDifficulty] || 'JSS 2';
+    selectedClassDisplay.textContent = currentStudentClass;
 
     const optionsContainer = document.getElementById('options');
     optionsContainer.innerHTML = '';
@@ -2996,7 +3031,12 @@ function updateDurationPreview() {
     const availableQuestions = selectedTopic && quizData[selectedTopic] && quizData[selectedTopic][selectedDifficulty]
         ? quizData[selectedTopic][selectedDifficulty].length
         : 60;
-    const minutes = Math.max(1, Number(getClassSubjectTimer(selectedTopic, currentStudentClass)) || Number(cbtSettings.defaultDuration) || 30);
+    const configuredDuration = getClassSubjectTimer(selectedTopic, currentStudentClass);
+    if (selectedTopic && (!Number.isFinite(Number(configuredDuration)) || Number(configuredDuration) < 1)) {
+        durationPreview.textContent = 'لم تحدد الإدارة مدة الاختبار لهذه المادة والصف بعد.';
+        return;
+    }
+    const minutes = Math.max(1, Number(configuredDuration) || Number(cbtSettings.defaultDuration) || 30);
     const formatArabic = value => new Intl.NumberFormat('ar').format(value);
     const durationText = `مدة الاختبار: ${formatArabic(minutes)} دقيقة.`;
     durationPreview.textContent = count > availableQuestions
@@ -3106,11 +3146,6 @@ function calculateScore() {
         ? subjectSettings.name
         : topicNames[selectedTopic] || selectedTopic.charAt(0).toUpperCase() + selectedTopic.slice(1);
 
-    const classMapping = {
-        easy: 'JSS 1',
-        medium: 'JSS 2',
-        hard: 'JSS 3'
-    };
     document.getElementById('studentNameResult').textContent = studentName || 'N/A';
     document.getElementById('classResult').textContent = currentStudentClass;
     document.getElementById('saveStatus').textContent = 'جارٍ حفظ النتيجة...';
@@ -3162,6 +3197,7 @@ async function saveCompletedAttempt(name, score, classLevel, totalQuestions) {
         unansweredCount: totalQuestions - answeredCount,
         status: 'Completed',
         timeUsed,
+        durationMinutes: getClassSubjectTimer(selectedTopic, currentStudentClass),
         timestamp: new Date().toISOString()
     };
 
@@ -3217,25 +3253,26 @@ function restartQuiz() {
     timeRemaining = 0;
     clearInterval(timerInterval);
     timerInterval = null;
-    document.getElementById('toggleReviewBtn').disabled = true;
+    if (toggleReviewBtn) toggleReviewBtn.disabled = true;
     document.getElementById('saveStatus').textContent = '';
     document.getElementById('quizReview').style.display = 'none';
-    document.getElementById('toggleReviewBtn').textContent = 'عرض مراجعة الأسئلة';
+    if (toggleReviewBtn) toggleReviewBtn.textContent = 'عرض مراجعة الأسئلة';
 
     // Reset UI
     document.querySelectorAll('.topic-btn').forEach(btn => {
         btn.classList.remove('selected');
         btn.setAttribute('aria-pressed', 'false');
     });
-    difficultyBtns.forEach(btn => btn.classList.remove('selected'));
-    difficultyBtns[1].classList.add('selected');
-    difficultyBtns.forEach((btn, index) => btn.setAttribute('aria-pressed', String(index === 1)));
     numQuestionsInput.value = String(cbtSettings.numberOfQuestions || 40);
     restartBtn.disabled = true;
     studentIdInput.value = '';
     currentStudentId = '';
     currentStudentKey = '';
+    currentStudentClass = '';
     currentAttemptId = '';
+    studentVerified = false;
+    startBtn.disabled = false;
+    updateClassSelection('');
     resultsScreen.classList.remove('results-hidden');
     // === END ADD ===
 
@@ -3256,11 +3293,6 @@ function showScreen(screen) {
     else if (screen === 'results') resultsScreen.classList.add('active');
 
 }
-
-// Initialize
-difficultyBtns[1].classList.add('selected');
-
-
 
 function launchConfetti() {
     const canvas = document.getElementById('confettiCanvas');
@@ -3326,31 +3358,34 @@ function launchConfetti() {
 const guidelineModal = document.getElementById('guidelineModal');
 const confirmBtn = document.getElementById('confirmGuidelines');
 
-confirmBtn.addEventListener('click', () => {
-    guidelineModal.style.display = 'none';
-});
+if (confirmBtn && guidelineModal) {
+    confirmBtn.addEventListener('click', () => {
+        guidelineModal.style.display = 'none';
+    });
+}
 
 const toggleReviewBtn = document.getElementById('toggleReviewBtn');
 const quizReview = document.getElementById('quizReview');
 
-toggleReviewBtn.addEventListener('click', () => {
+if (toggleReviewBtn && quizReview) {
+    toggleReviewBtn.addEventListener('click', () => {
+        const isVisible = quizReview.style.display === 'block';
 
-    const isVisible = quizReview.style.display === 'block';
+        if (quizReview.style.display === 'none') {
+            renderQuizReview();
+            quizReview.style.display = 'block';
+        } else {
+            quizReview.style.display = 'none';
+        }
 
-    if (quizReview.style.display === 'none') {
-        renderQuizReview(); // Render each time user opens it
-        quizReview.style.display = 'block';
-    } else {
-        quizReview.style.display = 'none';
-    }
-
-    quizReview.style.display = isVisible ? 'none' : 'block';
-    toggleReviewBtn.textContent = isVisible ? '⬇ عرض مراجعة الأسئلة ⬇' : '⬆ إخفاء مراجعة الأسئلة ⬆';
-});
-
+        quizReview.style.display = isVisible ? 'none' : 'block';
+        toggleReviewBtn.textContent = isVisible ? '⬇ عرض مراجعة الأسئلة ⬇' : '⬆ إخفاء مراجعة الأسئلة ⬆';
+    });
+}
 
 function renderQuizReview() {
-    quizReview.innerHTML = ''; // Clear previous content
+    if (!quizReview) return;
+    quizReview.innerHTML = '';
 
     currentQuiz.forEach((question, qIndex) => {
         const questionWrapper = document.createElement('div');

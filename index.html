@@ -6,6 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام الامتحان الإلكتروني CBT - منصة الاختبار المدرسي</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -72,6 +73,27 @@
             </form>
 
             <div id="studentExamOptions" hidden>
+            <section class="form-group class-selection" aria-labelledby="classSelectionTitle">
+                <h2 id="classSelectionTitle">اختر صفك الدراسي</h2>
+                <p class="field-hint">اختر الصف المسجل في بياناتك. يمكنك دخول الاختبارات المخصصة لصفك فقط.</p>
+                <div class="class-selection-section">
+                    <h3>المرحلة المتوسطة</h3>
+                    <div class="class-selection-options">
+                        <button class="class-selection-btn" type="button" data-class="JSS 1" aria-pressed="false" disabled>JSS 1</button>
+                        <button class="class-selection-btn" type="button" data-class="JSS 2" aria-pressed="false" disabled>JSS 2</button>
+                        <button class="class-selection-btn" type="button" data-class="JSS 3" aria-pressed="false" disabled>JSS 3</button>
+                    </div>
+                </div>
+                <div class="class-selection-section">
+                    <h3>المرحلة الثانوية</h3>
+                    <div class="class-selection-options">
+                        <button class="class-selection-btn" type="button" data-class="SS 1" aria-pressed="false" disabled>SS 1</button>
+                        <button class="class-selection-btn" type="button" data-class="SS 2" aria-pressed="false" disabled>SS 2</button>
+                        <button class="class-selection-btn" type="button" data-class="SS 3" aria-pressed="false" disabled>SS 3</button>
+                    </div>
+                </div>
+                <p id="registeredClassMessage" class="field-hint" role="status" aria-live="polite"></p>
+            </section>
             <div class="form-group">
                 <label>اختر المادة:</label>
                 <div class="topic-grid">
@@ -111,15 +133,6 @@
                 <label for="numQuestions">عدد الأسئلة (5-60):</label>
                 <input type="number" id="numQuestions" min="5" max="60" value="40">
                 <p id="durationPreview" class="field-hint" aria-live="polite">المدة: ٢٦ دقيقة و٤٠ ثانية عند اختيار ٤٠ سؤالاً.</p>
-            </div>
-
-            <div class="form-group" hidden>
-                <label>المرحلة (من سجل الطالب):</label>
-                <div class="difficulty-options">
-                    <button class="difficulty-btn" data-difficulty="easy" disabled>المرحلة ١</button>
-                    <button class="difficulty-btn selected" data-difficulty="medium">المرحلة ٢</button>
-                    <button class="difficulty-btn" data-difficulty="hard" disabled>المرحلة ٣</button>
-                </div>
             </div>
 
             <button class="btn" id="startbtn">ابدأ الاختبار</button>

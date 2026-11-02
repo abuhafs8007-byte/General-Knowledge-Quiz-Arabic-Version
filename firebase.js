@@ -51,6 +51,7 @@ const COLLECTIONS = {
 const SETTINGS_DOC = 'config';
 const REMOVED_SUBJECTS_DOC = 'removedSubjects';
 const ADMIN_EMAIL_FALLBACK = 'abuhafs8007@gmail.com';
+const QUESTION_BANK_LEVELS = ['easy', 'medium', 'hard', 'ss1', 'ss2', 'ss3'];
 const SDK = 'https://www.gstatic.com/firebasejs/9.22.0';
 
 let firebaseApp = null;
@@ -125,13 +126,19 @@ function assertDocumentSize(label, payload) {
     return bytes;
 }
 
+function normalizeClassName(className) {
+    const compact = String(className || '').trim().replace(/\s+/g, '').toUpperCase();
+    const match = compact.match(/^(JSS|SS)([123])$/);
+    return match ? `${match[1]} ${match[2]}` : String(className || '').trim();
+}
+
 function normalizeStudentRecord(id, data) {
     const studentId = String(data.studentId || id || '').trim();
     return {
         id: String(data.id || studentId || id).trim(),
         name: String(data.name || '').trim(),
         studentId,
-        className: String(data.className || '').trim()
+        className: normalizeClassName(data.className)
     };
 }
 
@@ -163,6 +170,12 @@ function requireDb() {
 }
 
 async function init() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+        state = BACKEND_STATE.UNCONFIGURED;
+        stateError = 'Firebase initialization requires a browser environment.';
+        return;
+    }
+
     if (!hasUsableConfig()) {
         state = BACKEND_STATE.UNCONFIGURED;
         stateError = 'Firebase is not configured yet. Fill in firebase.config.js with the Web app values for the Arabic CBT Firebase project.';
@@ -345,7 +358,7 @@ window.cbtBackend = {
         questionsSnapshot.forEach(entry => {
             const data = entry.data() || {};
             const bank = {};
-            ['easy', 'medium', 'hard'].forEach(level => {
+            QUESTION_BANK_LEVELS.forEach(level => {
                 bank[level] = Array.isArray(data[level]) ? data[level] : [];
             });
             questions[entry.id] = bank;
@@ -408,7 +421,12 @@ window.cbtBackend = {
         const attempts = [];
         attemptsSnapshot.forEach(entry => {
             const data = entry.data() || {};
-            attempts.push({ ...data, id: String(data.id || entry.id) });
+            attempts.push({
+                ...data,
+                id: String(data.id || entry.id),
+                class: normalizeClassName(data.class || data.className),
+                className: normalizeClassName(data.className || data.class)
+            });
         });
 
         return { students, attempts, results: attempts.slice() };
@@ -442,8 +460,8 @@ window.cbtBackend = {
         const writes = [];
         Object.entries(questions || {}).forEach(([subjectId, levels]) => {
             if (!subjectId) return;
-            const payload = { easy: [], medium: [], hard: [] };
-            ['easy', 'medium', 'hard'].forEach(level => {
+            const payload = Object.fromEntries(QUESTION_BANK_LEVELS.map(level => [level, []]));
+            QUESTION_BANK_LEVELS.forEach(level => {
                 payload[level] = Array.isArray(levels && levels[level]) ? levels[level] : [];
             });
             assertDocumentSize(`Question bank for ${subjectId}`, payload);
@@ -486,7 +504,7 @@ window.cbtBackend = {
                     id,
                     name: String(student.name || '').trim(),
                     studentId: id,
-                    className: String(student.className || '').trim()
+                    className: normalizeClassName(student.className)
                 }
             });
         });
@@ -514,13 +532,23 @@ window.cbtBackend = {
      */
     async writeAttempt(attempt) {
         requireDb();
-        const studentId = String(attempt.studentId || '').trim();
+        const studentId = String(attempt.studentId || '').trim().toUpperCase();
         const subjectId = String(attempt.subjectId || '').trim();
+        const className = normalizeClassName(attempt.className || attempt.class);
         if (!studentId || !subjectId) {
             throw new Error('An attempt is missing its Student ID or subject.');
         }
+        if (!['JSS 1', 'JSS 2', 'JSS 3', 'SS 1', 'SS 2', 'SS 3'].includes(className)) {
+            throw new Error('An attempt has an unsupported registered class.');
+        }
         const attemptId = buildAttemptId(studentId, subjectId);
-        await this.writeDoc(`${COLLECTIONS.attempts}/${attemptId}`, { ...attempt, id: attemptId }, true);
+        await this.writeDoc(`${COLLECTIONS.attempts}/${attemptId}`, {
+            ...attempt,
+            id: attemptId,
+            studentId,
+            class: className,
+            className
+        }, true);
         // Mirror the minimal status marker. It is the only thing a student is
         // ever allowed to read back, and it carries no name, class or score.
         await this.writeDoc(`${COLLECTIONS.attemptStatus}/${attemptId}`, {
@@ -551,4 +579,3 @@ window.cbtBackend = {
         await this.deleteDoc(`${COLLECTIONS.attemptStatus}/${attemptId}`);
     }
 };
-

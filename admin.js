@@ -21,19 +21,17 @@ let adminStorageError = false;
 let adminImportState = null;
 
 const adminSections = ['Dashboard', 'Students', 'Questions', 'Subjects / Exams', 'Attempts', 'Results', 'Settings'];
-const adminClassOptions = ['JSS 1', 'JSS 2', 'JSS 3'];
+const adminClassOptions = ['JSS 1', 'JSS 2', 'JSS 3', 'SS 1', 'SS 2', 'SS 3'];
+const adminQuestionLevels = ['easy', 'medium', 'hard', 'ss1', 'ss2', 'ss3'];
 
 function normalizeAdminText(value) {
     return String(value ?? '').trim().replace(/\s+/g, ' ');
 }
 
 function normalizeAdminClass(className) {
-    const canonical = normalizeAdminText(className).replace(/\s+/g, ' ');
-    const upper = canonical.toUpperCase();
-    if (upper === 'JSS1' || upper === 'JSS 1') return 'JSS 1';
-    if (upper === 'JSS2' || upper === 'JSS 2') return 'JSS 2';
-    if (upper === 'JSS3' || upper === 'JSS 3') return 'JSS 3';
-    return canonical;
+    const compact = normalizeAdminText(className).replace(/\s+/g, '').toUpperCase();
+    const match = compact.match(/^(JSS|SS)([123])$/);
+    return match ? `${match[1]} ${match[2]}` : '';
 }
 
 function normalizeAdminSubject(value) {
@@ -245,7 +243,7 @@ async function handleStudentForm(values) {
         id: originalId || String(values.get('studentId')).trim(),
         name: String(values.get('name')).trim(),
         studentId: String(values.get('studentId')).trim(),
-        className: String(values.get('className')).trim()
+        className: normalizeAdminClass(values.get('className'))
     };
     if (!student.id || !student.name || !student.studentId || !student.className) return;
     if (hasDuplicateStudentId(student.studentId, originalId)) {
@@ -462,7 +460,7 @@ function renderStudents() {
             <input type="hidden" name="originalId">
             <label>Full name<input name="name" required></label>
             <label>Student ID<input name="studentId" required></label>
-            <label>Class<input name="className" placeholder="JSS 2" required></label>
+            <label>Class<select name="className" required>${adminClassOptions.map(option => `<option value="${escapeAdminText(option)}">${escapeAdminText(option)}</option>`).join('')}</select></label>
             <div class="admin-form-actions"><button class="admin-primary-button" type="submit">Save Student</button>
                 <button class="admin-light-button" type="button" data-action="cancel-form">Cancel</button></div>
         </form>
@@ -484,15 +482,25 @@ function subjectSelectOptions(selected = '') {
 }
 
 function questionDifficultyFromClass(classValue) {
-    const normalized = normalizeAdminClass(classValue);
-    if (normalized === 'JSS 1') return 'easy';
-    if (normalized === 'JSS 2') return 'medium';
-    if (normalized === 'JSS 3') return 'hard';
-    return '';
+    return {
+        'JSS 1': 'easy',
+        'JSS 2': 'medium',
+        'JSS 3': 'hard',
+        'SS 1': 'ss1',
+        'SS 2': 'ss2',
+        'SS 3': 'ss3'
+    }[normalizeAdminClass(classValue)] || '';
 }
 
 function questionClassLabelFromDifficulty(difficulty) {
-    return { easy: 'JSS 1', medium: 'JSS 2', hard: 'JSS 3' }[difficulty] || '';
+    return {
+        easy: 'JSS 1',
+        medium: 'JSS 2',
+        hard: 'JSS 3',
+        ss1: 'SS 1',
+        ss2: 'SS 2',
+        ss3: 'SS 3'
+    }[difficulty] || '';
 }
 
 function getSubjectTimerMap(subject) {
@@ -509,7 +517,9 @@ function getSubjectTimerMap(subject) {
 function readSubjectTimersFromForm(values) {
     const timers = {};
     adminClassOptions.forEach((className, index) => {
-        const value = Number(values.get(`timer_${index}`));
+        const rawValue = String(values.get(`timer_${index}`) || '').trim();
+        if (!rawValue) return;
+        const value = Number(rawValue);
         if (Number.isInteger(value) && value >= 1 && value <= 300) {
             timers[className] = value;
         }
@@ -570,7 +580,7 @@ function buildQuestionImportPreview(csvText) {
         });
         if (!answerValue.valid) errors.push(answerValue.message);
         if (!subject) errors.push('Subject does not exist.');
-        if (!classValue || !difficulty) errors.push('Class is invalid. Expected JSS 1, JSS 2, or JSS 3.');
+        if (!classValue || !difficulty) errors.push('Class is invalid. Expected JSS 1, JSS 2, JSS 3, SS 1, SS 2, or SS 3.');
 
         const duplicateQuestion = allQuestions().find(item => {
             const isSameQuestion = item.question.q.trim() === questionText;
@@ -625,7 +635,7 @@ function buildStudentImportPreview(csvText) {
 
         if (!studentId) errors.push('Student ID is empty.');
         if (!name) errors.push('Student Name is empty.');
-        if (!adminClassOptions.includes(className)) errors.push('Class is invalid. Expected JSS 1, JSS 2, or JSS 3.');
+        if (!adminClassOptions.includes(className)) errors.push('Class is invalid. Expected JSS 1, JSS 2, JSS 3, SS 1, SS 2, or SS 3.');
 
         if (studentId) {
             if (studentIdsInFile.has(studentId.toUpperCase())) {
@@ -734,7 +744,7 @@ function renderQuestions() {
             </div>
             <div class="admin-two-column">
                 <label>Subject<select name="subjectId" required>${subjectSelectOptions()}</select></label>
-                <label>Class<select name="difficulty"><option value="easy">JSS 1</option><option value="medium">JSS 2</option><option value="hard">JSS 3</option></select></label>
+                <label>Class<select name="difficulty">${adminQuestionLevels.map(level => `<option value="${level}">${questionClassLabelFromDifficulty(level)}</option>`).join('')}</select></label>
                 <label>Correct answer<select name="answer"><option value="0">Option A</option><option value="1">Option B</option><option value="2">Option C</option><option value="3">Option D</option></select></label>
             </div>
             <div class="admin-form-actions"><button class="admin-primary-button" type="submit">Save Question</button>
@@ -744,7 +754,7 @@ function renderQuestions() {
         <tbody>${matches.length ? matches.map(item => `<tr>
             <td>${escapeAdminText(item.question.q)}</td>
             <td>${escapeAdminText((window.cbtApp.subjects.find(subject => subject.id === item.subjectId) || {}).name || item.subjectId)}</td>
-            <td>${escapeAdminText({ easy: 'JSS 1', medium: 'JSS 2', hard: 'JSS 3' }[item.difficulty] || item.difficulty)}</td>
+            <td>${escapeAdminText(questionClassLabelFromDifficulty(item.difficulty) || item.difficulty)}</td>
             <td>${escapeAdminText(item.question.opts[item.question.ans])}</td>
             <td class="admin-actions">
                 <button data-action="question-edit" data-subject="${escapeAdminText(item.subjectId)}" data-level="${escapeAdminText(item.difficulty)}" data-index="${item.index}">Edit</button>
@@ -763,7 +773,7 @@ function renderSubjects() {
             <div class="admin-timer-grid">
                 ${adminClassOptions.map((className, index) => `
                     <label>${escapeAdminText(className)}
-                        <input name="timer_${index}" type="number" min="1" max="300" value="${window.cbtApp.settings.defaultDuration}">
+                        <input name="timer_${index}" type="number" min="1" max="300" placeholder="${escapeAdminText(window.cbtApp.settings.defaultDuration)}">
                     </label>
                 `).join('')}
             </div>
@@ -794,7 +804,7 @@ function renderAttempts() {
     return `<div class="admin-section-heading"><div><h2>Attempts</h2><p>Inspect, edit, reset, or remove a student's attempt.</p></div></div>
         <div class="admin-table-wrap"><table><thead><tr><th>Student ID</th><th>Student</th><th>Class</th><th>Subject</th><th>Status</th><th>Score</th><th>Date</th><th>Time used</th><th>Actions</th></tr></thead>
         <tbody>${attempts.length ? attempts.map(attempt => `<tr>
-            <td>${escapeAdminText(attempt.studentId || '--')}</td><td>${escapeAdminText(attempt.studentName)}</td><td>${escapeAdminText(attempt.className)}</td>
+            <td>${escapeAdminText(attempt.studentId || '--')}</td><td>${escapeAdminText(attempt.studentName)}</td><td>${escapeAdminText(normalizeAdminClass(attempt.className || attempt.class) || attempt.className || attempt.class)}</td>
             <td>${escapeAdminText(attempt.subjectName || attempt.subjectId)}</td>
             <td>${escapeAdminText(attempt.status)}</td><td>${Number(attempt.score) || 0}/${Number(attempt.totalQuestions) || 0}</td>
             <td>${escapeAdminText(formatAdminDate(attempt.dateCompleted || attempt.dateStarted))}</td>
@@ -812,12 +822,12 @@ function renderResults() {
         const search = `${result.studentName || result.name} ${result.studentId} ${result.subject} ${result.className}`.toLowerCase();
         return (!resultFilters.search || search.includes(resultFilters.search.toLowerCase())) &&
             (!resultFilters.student || (result.studentName || result.name) === resultFilters.student) &&
-            (!resultFilters.className || result.className === resultFilters.className) &&
+            (!resultFilters.className || normalizeAdminClass(result.className || result.class) === resultFilters.className) &&
             (!resultFilters.subject || result.subjectId === resultFilters.subject) &&
             (!resultFilters.status || result.status === resultFilters.status);
     });
     const students = [...new Set(window.cbtApp.results.map(result => result.studentName || result.name).filter(Boolean))];
-    const classes = [...new Set(window.cbtApp.results.map(result => result.className).filter(Boolean))];
+    const classes = [...new Set(window.cbtApp.results.map(result => normalizeAdminClass(result.className || result.class)).filter(Boolean))];
     return `<div class="admin-section-heading"><div><h2>Results</h2><p>Student score records saved on this device.</p></div></div>
         <div class="admin-filter-grid">
             <input data-result-filter="search" value="${escapeAdminText(resultFilters.search)}" placeholder="Search results">
@@ -829,7 +839,7 @@ function renderResults() {
         <div class="admin-table-wrap"><table><thead><tr><th>Student</th><th>Student ID</th><th>Class</th><th>Subject</th><th>Score</th><th>Percentage</th><th>Status</th><th>Date</th></tr></thead>
         <tbody>${attempts.length ? attempts.map(result => `<tr>
             <td>${escapeAdminText(result.studentName || result.name)}</td><td>${escapeAdminText(result.studentId || '--')}</td>
-            <td>${escapeAdminText(result.className || result.class)}</td><td>${escapeAdminText(result.subject)}</td>
+            <td>${escapeAdminText(normalizeAdminClass(result.className || result.class) || result.className || result.class)}</td><td>${escapeAdminText(result.subject)}</td>
             <td>${Number(result.score) || 0}/${Number(result.totalQuestions) || 0}</td><td>${Number(result.percentage) || 0}%</td>
             <td>${escapeAdminText(result.status)}</td><td>${escapeAdminText(formatAdminDate(result.timestamp || result.dateCompleted))}</td>
         </tr>`).join('') : '<tr><td colspan="8" class="admin-empty">No results match these filters.</td></tr>'}</tbody></table></div>`;
@@ -1200,7 +1210,7 @@ adminRoot.addEventListener('click', event => {
         setFormValue(form, 'instructions', subject.instructions);
         adminClassOptions.forEach((className, index) => {
             const input = form.elements.namedItem(`timer_${index}`);
-            if (input) input.value = timers[className] || subject.durationMinutes || window.cbtApp.settings.defaultDuration;
+            if (input) input.value = timers[className] ?? '';
         });
         form.elements.namedItem('isEnabled').checked = Boolean(subject.isEnabled);
         form.hidden = false;
@@ -1392,7 +1402,7 @@ adminRoot.addEventListener('submit', event => {
             ? window.cbtApp.subjects.map(entry => entry.id === id ? subject : entry)
             : window.cbtApp.subjects.concat(subject);
         if (!originalId) {
-            window.cbtApp.questions[id] = { easy: [], medium: [], hard: [] };
+            window.cbtApp.questions[id] = Object.fromEntries(adminQuestionLevels.map(level => [level, []]));
             window.cbtApp.removedSubjects = window.cbtApp.removedSubjects.filter(removedId => removedId !== id);
         }
         window.cbtApp.topicNames[id] = name;
